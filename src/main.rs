@@ -1,0 +1,458 @@
+use std::{env, fs};
+use mlua::{Lua, Function};
+
+use std::sync::Arc;
+use std::cmp::{max, min};
+use std::thread::JoinHandle;
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
+use wgpu::util::DeviceExt;
+use crossbeam::channel::{bounded, Sender, Receiver};
+
+pub mod utils;
+use utils::{Vertex, Location, MainCommand, ContentCommand, keycodes_transformer};
+
+pub mod content;
+use content::{Content, object::GPUObject};
+
+use crate::utils::LfnCommand;
+use crate::utils::lori::Lfn;
+
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, serde::Deserialize, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GPUView {
+    pub time: [f32; 2],
+    pub scale: [f32; 2],
+    pub position: [f32; 2],
+    pub rotation: [f32; 2],
+}
+
+impl GPUView {
+    pub fn new() -> Self {
+        Self {
+            time: [0., 0.],
+            scale: [1., 1.],
+            position: [0., 0.],
+            rotation: [0., 0.],
+        }
+    }
+}
+
+
+
+struct State {
+    lfn: Lfn,
+    lori_load: Function,
+    lori_keypress: Function,
+
+    init_time: chrono::DateTime<chrono::Utc>,
+    last_time: chrono::DateTime<chrono::Utc>,
+    surface: wgpu::Surface<'static>,
+    surface_format: wgpu::TextureFormat,
+    msaa_view: wgpu::TextureView,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    size: winit::dpi::PhysicalSize<u32>,
+    render_pipeline: wgpu::RenderPipeline,
+
+    objects: Vec<GPUObject>,
+
+    window: Arc<Window>,
+    window_scale: [f32; 4],
+    gpu_view: GPUView,
+    gpu_view_buffer: wgpu::Buffer,
+    gpu_view_bind_group: wgpu::BindGroup,
+    
+    content_tx: Sender<ContentCommand>,
+    main_rx: Receiver<MainCommand>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl State {
+    async fn new(window: Arc<Window>) -> State {
+        let args: Vec<String> = env::args().collect();
+    
+        let lua = Lua::new();
+        let (ltx, lrx) = bounded::<LfnCommand>(1);
+        let lfn: Lfn = Lfn::new(&lua, ltx);
+
+        let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
+        _= lua.load(lua_code).exec();
+
+        let lori_load: mlua::Function = lfn.lori.get("load").unwrap();
+        let lori_keypress: mlua::Function = lfn.lori.get("keypress").unwrap();
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: Default::default(),
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        });
+        
+        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
+        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor::default()).await.unwrap();
+        
+        let size = window.inner_size();
+        let surface = instance.create_surface(window.clone()).unwrap();
+        let cap = surface.get_capabilities(&adapter);
+        let surface_format = cap.formats[0];
+
+        let (content_tx, content_rx) = bounded::<ContentCommand>(1);
+        let (main_tx, main_rx) = bounded::<MainCommand>(1);
+        
+        let mut content = Content::create(lrx);
+        let handle = Some(std::thread::spawn(move || { content.thread_loop(content_rx, main_tx); }));
+        
+        let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
+
+        let objects: Vec<GPUObject> = Vec::new();
+
+        let mut gpu_view: GPUView = GPUView::new();
+        let min: f32 = min(size.width, size.height) as f32;
+        let max: f32 = max(size.width, size.height) as f32;
+        gpu_view.scale = [size.height as f32 / max, size.width as f32 / max];
+        
+        let window_scale: [f32; 4] = [(size.width as f32 - min) / 2., (size.height as f32 - min) / 2., min, min];
+        
+        let gpu_view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Viewport Buffer"),
+            contents: bytemuck::cast_slice(&[gpu_view]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        
+        let gpu_view_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Viewport Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+        });
+
+        let gpu_view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Viewport Bind Group"),
+            layout: &gpu_view_bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: gpu_view_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let gpu_view_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Viewport Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+        });
+
+        let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("msaa color texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: surface_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        
+        let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        
+        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Layout for Primary Render Pipeline"),
+            bind_group_layouts: &[Some(gpu_view_bind_layout).as_ref()],
+            immediate_size: 0,
+        });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Primary Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &raster_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Some(Vertex::desc()), Some(Location::desc())],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &raster_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                // cull_mode: Some(wgpu::Face::Front),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
+        
+
+        let mut state = State {
+            lfn,
+            lori_load,
+            lori_keypress,
+            
+            init_time: chrono::Utc::now(),
+            last_time: chrono::Utc::now(),
+            surface,
+            surface_format,
+            msaa_view,
+            device,
+            queue,
+            size,
+            render_pipeline,
+            window,
+
+            objects,
+
+            window_scale,
+            gpu_view,
+            gpu_view_buffer,
+            gpu_view_bind_group,
+            
+            content_tx,
+            main_rx,
+            handle,
+        };
+
+        state.configure_surface();
+        state
+    }
+
+    fn get_window(&self) -> &Window {
+        &self.window
+    }
+
+    fn configure_surface(&mut self) {
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: self.surface_format,
+            view_formats: vec![self.surface_format.add_srgb_suffix()],
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            color_space: wgpu::SurfaceColorSpace::default(),
+            width: self.size.width,
+            height: self.size.height,
+            desired_maximum_frame_latency: 2,
+            present_mode: wgpu::PresentMode::AutoVsync,
+        };
+        self.surface.configure(&self.device, &surface_config);
+
+
+        let msaa_texture = &self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("MSAA Texture"),
+            size: wgpu::Extent3d {
+                width: self.size.width,
+                height: self.size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.surface_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        
+        self.msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    }
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        self.size = new_size;
+        self.configure_surface();
+        let size: [u32; 2] = [self.size.width, self.size.height];
+        let min: f32 = min(size[0], size[1]) as f32;
+        let max: f32 = max(size[0], size[1]) as f32;
+        
+        self.gpu_view.scale = [size[1] as f32 / max, size[0] as f32 / max];
+        self.window_scale = [(size[0] as f32 - min) / 2., (size[1] as f32 - min) / 2., min, min];
+    }
+    
+    fn keyboard_inputs(&mut self, code: winit::keyboard::KeyCode, state: bool) {
+        if let Err(e) = self.lori_keypress.call::<()>(("eea", state)) {
+            eprintln!("Error: {}", e);
+        }
+    }
+
+    fn render(&mut self) {
+        
+
+        let surface_texture = self.surface.get_current_texture();
+        
+        let pretexture_view = match surface_texture {
+            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
+            _ => return
+        };
+        let texture_view = pretexture_view.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.surface_format.add_srgb_suffix()),
+            ..Default::default()
+        });
+
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.msaa_view,
+                depth_slice: None,
+                resolve_target: Some(&texture_view),
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        renderpass.set_pipeline(&self.render_pipeline);
+        
+        _= self.content_tx.send(ContentCommand::Render);
+        if let Ok(cmd) = self.main_rx.recv() {
+            match cmd {
+                MainCommand::CreateObject { x, y, rotation } => {
+                    self.objects[0].spawn(x, y, rotation);
+                }
+                MainCommand::Render { instances, camera } => {
+                    for i in 0..self.objects.len() {
+                        self.queue.write_buffer(&self.objects[i].location_buffer, 0, bytemuck::cast_slice(&instances[i]));
+                    }
+
+                    self.gpu_view.position[0] = camera.position.x;
+                    self.gpu_view.position[1] = camera.position.y;
+                    self.gpu_view.rotation[0] = camera.rotation;
+                }
+            }
+        }
+        
+        renderpass.set_viewport(self.window_scale[0], self.window_scale[1], self.window_scale[2], self.window_scale[3], 0., 1.);
+        
+        self.gpu_view.time[0] = chrono::Utc::now().signed_duration_since(self.init_time).as_seconds_f32();
+        self.gpu_view.time[1] = chrono::Utc::now().signed_duration_since(self.last_time).as_seconds_f32();
+        self.queue.write_buffer(&self.gpu_view_buffer, 0, bytemuck::bytes_of(&[self.gpu_view]));
+
+        renderpass.set_bind_group(0, &self.gpu_view_bind_group, &[]);
+        
+        for i in 0..self.objects.len() { // Draw each shape
+            renderpass.set_vertex_buffer(0, self.objects[i].vertex_buffer.slice(..));
+            renderpass.set_vertex_buffer(1, self.objects[i].location_buffer.slice(..));
+            renderpass.set_index_buffer(self.objects[i].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            renderpass.draw_indexed(0..self.objects[i].indices.len() as u32, 0, 0..self.objects[i].locations.len() as _);
+        }
+        self.last_time = chrono::Utc::now();
+        
+        drop(renderpass);
+        
+        self.queue.submit(Some(encoder.finish()));
+        self.window.pre_present_notify();
+        self.queue.present(pretexture_view);
+    }
+
+    fn exit(&mut self) {
+        _= self.content_tx.send(ContentCommand::Exit);
+        if let Some(join_handle) = self.handle.take() {
+            _= join_handle.join();
+        };
+    }
+}
+
+#[derive(Default)]
+struct App {
+    state: Option<State>,
+}
+
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let window = Arc::new(event_loop.create_window(Window::default_attributes()).unwrap());
+
+        let state = pollster::block_on(State::new(window.clone()));
+        self.state = Some(state);
+
+        window.request_redraw();
+    }
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        let superstate = self.state.as_mut().unwrap();
+
+        match event {
+            WindowEvent::CloseRequested => {
+                println!("Close requested! Exiting application...");
+                superstate.exit();
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                superstate.render();
+                superstate.get_window().request_redraw();
+            }
+            WindowEvent::Resized(size) => {
+                superstate.resize(size);
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    winit::event::KeyEvent {
+                        physical_key: winit::keyboard::PhysicalKey::Code(code),
+                        state: key_state,
+                        ..
+                    },
+                ..
+            } => superstate.keyboard_inputs(code, key_state.is_pressed()),
+            _ => (),
+            
+        }
+    }
+}
+
+fn main() {
+    let events = EventLoop::new().unwrap();
+    events.set_control_flow(ControlFlow::Poll);
+
+    let mut app = App::default();
+    match events.run_app(&mut app) {
+        Ok(()) => println!("Exited successfully."),
+        Err(error) => eprintln!("Exited with an error:\n {error:?}"),
+    }
+}
