@@ -1,5 +1,4 @@
 use std::{env, fs};
-use mlua::{Lua, Function};
 
 use std::sync::Arc;
 use std::cmp::{max, min};
@@ -12,13 +11,10 @@ use wgpu::util::DeviceExt;
 use crossbeam::channel::{bounded, Sender, Receiver};
 
 pub mod utils;
-use utils::{Vertex, Location, MainCommand, ContentCommand, keycodes_transformer};
+use utils::{Vertex, Location, MainCommand, ContentCommand};
 
 pub mod content;
 use content::{Content, object::GPUObject};
-
-use crate::utils::LfnCommand;
-use crate::utils::lori::Lfn;
 
 
 #[repr(C)]
@@ -44,10 +40,6 @@ impl GPUView {
 
 
 struct State {
-    lfn: Lfn,
-    lori_load: Function,
-    lori_keypress: Function,
-
     init_time: chrono::DateTime<chrono::Utc>,
     last_time: chrono::DateTime<chrono::Utc>,
     surface: wgpu::Surface<'static>,
@@ -74,16 +66,6 @@ struct State {
 impl State {
     async fn new(window: Arc<Window>) -> State {
         let args: Vec<String> = env::args().collect();
-    
-        let lua = Lua::new();
-        let (ltx, lrx) = bounded::<LfnCommand>(1);
-        let lfn: Lfn = Lfn::new(&lua, ltx);
-
-        let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
-        _= lua.load(lua_code).exec();
-
-        let lori_load: mlua::Function = lfn.lori.get("load").unwrap();
-        let lori_keypress: mlua::Function = lfn.lori.get("keypress").unwrap();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -103,8 +85,9 @@ impl State {
 
         let (content_tx, content_rx) = bounded::<ContentCommand>(1);
         let (main_tx, main_rx) = bounded::<MainCommand>(1);
-        
-        let mut content = Content::create(lrx);
+
+        let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
+        let mut content = Content::create(lua_code);
         let handle = Some(std::thread::spawn(move || { content.thread_loop(content_rx, main_tx); }));
         
         let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
@@ -228,14 +211,9 @@ impl State {
             },
             multiview_mask: None,
             cache: None,
-        });
-        
+        });        
 
         let mut state = State {
-            lfn,
-            lori_load,
-            lori_keypress,
-            
             init_time: chrono::Utc::now(),
             last_time: chrono::Utc::now(),
             surface,
@@ -312,14 +290,10 @@ impl State {
     }
     
     fn keyboard_inputs(&mut self, code: winit::keyboard::KeyCode, state: bool) {
-        if let Err(e) = self.lori_keypress.call::<()>(("eea", state)) {
-            eprintln!("Error: {}", e);
-        }
+        _= self.content_tx.send(ContentCommand::Input { code, state });
     }
 
     fn render(&mut self) {
-        
-
         let surface_texture = self.surface.get_current_texture();
         
         let pretexture_view = match surface_texture {

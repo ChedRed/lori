@@ -12,4 +12,4 @@ rapier2d = "0.34.0"
 serde = { version = "1.0.228", features = ["derive"] }
 winit = "0.30.13"
 wgpu = "30.0.0"
-mlua = { version = "0.12.0", features = ["luajit52"] }
+mlua = { version = "0.12.0", features = ["luajit52", "send"] }

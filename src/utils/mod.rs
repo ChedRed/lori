@@ -13,6 +13,10 @@ pub enum LfnCommand {
 
 #[derive(Clone)]
 pub enum ContentCommand {
+    Input {
+        code: winit::keyboard::KeyCode,
+        state: bool,
+    },
     Render,
     Exit,
 }
@@ -111,24 +115,5 @@ impl Displacement {
             velocity: Vector2::new(),
             rotation: 0.,
         }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Wheel {
-    pub position: [f32; 2],
-    pub rotation: f32,
-    pub angle: f32,
-    pub base: f32,
-    pub diameter: f32,
-    pub friction: f32,
-    pub limits: [f32; 2],
-    pub power: f32,
-}
-
-pub fn keycodes_transformer(code: winit::keyboard::KeyCode) -> &'static str {
-    match code {
-        winit::keyboard::KeyCode::KeyA => "a",
-        _ => "NONE",
     }
 }

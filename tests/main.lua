@@ -1,7 +1,15 @@
 function lori.load()
-    lori.create.object()
+    print("Load")
 end
 
-function lori.keypress(code, state)
+function lori.keypressed(key)
+    print("KEY PRESSED", key)
+end
+
+function lori.keyreleased(key)
+    print("KEY RELEASED", key)
+end
+
+function lori.update()
     
 end

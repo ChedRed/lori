@@ -1,5 +1,8 @@
+use mlua::{Lua, Function, Table};
+use crate::utils::lori::{Lfn, keycodes_transformer};
+
 use crate::utils::{ContentCommand, Displacement, LfnCommand, Location, MainCommand};
-use crossbeam::channel::{Sender, Receiver};
+use crossbeam::channel::{Receiver, Sender, bounded};
 use std::time::{Duration, Instant};
 use rapier2d::prelude::*;
 pub mod object;
@@ -24,7 +27,11 @@ impl Control {
 }
 
 pub struct Content {
-    lrx: Receiver<LfnCommand>,
+    lua: Lua,
+    lfn: Lfn,
+    lori_update: Function,
+    lori_keypressed: Function,
+    lori_keyreleased: Function,
     
     displacement: Displacement,
     objects: Vec<Object>,
@@ -43,7 +50,22 @@ pub struct Content {
 }
 
 impl Content {
-    pub fn create(lrx: Receiver<LfnCommand>) -> Self {
+    pub fn create(lua_code: String) -> Self {
+        let lua = Lua::new();
+        let (ltx, lrx) = bounded::<LfnCommand>(1);
+        let lfn: Lfn = Lfn::new(&lua, ltx);
+
+        _= lua.load(lua_code).exec().unwrap();
+
+        let lhk: Table = lua.globals().get("lori").unwrap();
+
+        let lori_load: Function = lhk.get("load").unwrap();
+        let lori_update: Function = lhk.get("update").unwrap();
+        let lori_keypressed: Function = lhk.get("keypressed").unwrap();
+        let lori_keyreleased: Function = lhk.get("keyreleased").unwrap();
+
+        _= lori_load.call::<()>(());
+        
         let objects: Vec<Object> = Vec::new();
         
         let gravity = Vec2 { x: 0., y: 0. };
@@ -67,7 +89,12 @@ impl Content {
 
 
         Self {
-            lrx,
+            lua,
+            lfn,
+            lori_update,
+            lori_keypressed,
+            lori_keyreleased,
+            
             displacement,
             objects,
 
@@ -91,14 +118,8 @@ impl Content {
         let mut start = Instant::now() + interval;
         
         while loopit {
-            while let Ok(cmd) = self.lrx.try_recv() {
-                match cmd {
-                    LfnCommand::CreateObject { x, y, rotation } => {
-                        self.objects[0].spawn(x, y, rotation, &mut self.rigidbodies, &mut self.colliders);
-                    }
-                }
-            }
-            
+
+            _= self.lori_update.call::<()>(());
             self.update_objects();
                 
             while let Ok(cmd) = rx.try_recv() {
@@ -119,6 +140,14 @@ impl Content {
                         }
                         
                         _= tx.send(MainCommand::Render { instances: new_double_locations, camera: self.displacement });
+                    }
+
+                    ContentCommand::Input { code, state } => {
+                        if state {
+                            _= self.lori_keypressed.call::<()>((keycodes_transformer(code), state));
+                        } else {
+                            _= self.lori_keyreleased.call::<()>((keycodes_transformer(code), state));
+                        }
                     }
     
                     ContentCommand::Exit => {
