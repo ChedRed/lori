@@ -4,11 +4,13 @@ pub mod lori;
 use transform::Vector2;
 
 pub enum LfnCommand {
-    CreateObject {
-        x: f32,
-        y: f32,
-        rotation: f32,
+    SetWindowTitle {
+        text: String,
     },
+    SetWindowSize {
+        w: u32,
+        h: u32,
+    }
 }
 
 #[derive(Clone)]
@@ -32,6 +34,13 @@ pub enum MainCommand {
         y: f32,
         rotation: f32,
     },
+    SetWindowTitle {
+        text: String,
+    },
+    SetWindowSize {
+        w: u32,
+        h: u32,
+    },
 }
 
 pub struct Xy {
@@ -42,6 +51,7 @@ pub struct Xy {
 #[derive(Copy, Clone, Debug, serde::Deserialize, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 2],
+    pub uv: [f32; 2],
     pub color: [f32; 4],
 }
 
@@ -59,6 +69,11 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 2,
                     format: wgpu::VertexFormat::Float32x4,
                 },
             ],
@@ -87,12 +102,12 @@ impl Location {
             attributes: &[
                 wgpu::VertexAttribute {
                     offset: 0,
-                    shader_location: 2,
+                    shader_location: 3,
                     format: wgpu::VertexFormat::Float32x2,
                 },
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 3,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],

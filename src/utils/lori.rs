@@ -9,15 +9,31 @@ pub struct Lfn {
 
 impl Lfn {
     pub fn new(lua: &Lua, tx: Sender<LfnCommand>) -> Self {
+        let tx2 = tx.clone();
+        let tx3 = tx.clone();
         let lori = lua.create_table().unwrap();
-        let create = lua.create_table().unwrap();
-
-        _= create.set("object", lua.create_function(move |_, ()| { // lori.create.object()
-            tx.clone().send(LfnCommand::CreateObject { x: 0., y: 0., rotation: 0. }).map_err(mlua::Error::external).unwrap();
+        
+        let set = lua.create_table().unwrap();
+        let window = lua.create_table().unwrap();
+        _= window.set("title", lua.create_function(move |_, text| { // lori.set.window.title
+            _= tx2.send(LfnCommand::SetWindowTitle { text });
             Ok(())
         }).unwrap());
+
+        _= window.set("size", lua.create_function(move |_, (w, h)| { // lori.set.window.size
+            _= tx3.send(LfnCommand::SetWindowSize { w, h });
+            Ok(())
+        }).unwrap());
+            
+        let get = lua.create_table().unwrap();
+        let new = lua.create_table().unwrap();
+        let draw = lua.create_table().unwrap();
+        let push = lua.create_table().unwrap();
+        let delete = lua.create_table().unwrap();
+
         
-        _= lori.set("create", create);
+        _= set.set("window", window);
+        _= lori.set("set", set);
         _= lua.globals().set("lori", lori.clone());
 
         Self {

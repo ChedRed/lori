@@ -1,8 +1,9 @@
 use mlua::{Lua, Function, Table};
+use crate::utils::LfnCommand::SetWindowTitle;
 use crate::utils::lori::{Lfn, keycodes_transformer};
 
 use crate::utils::{ContentCommand, Displacement, LfnCommand, Location, MainCommand};
-use crossbeam::channel::{Receiver, Sender, bounded};
+use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
 use std::time::{Duration, Instant};
 use rapier2d::prelude::*;
 pub mod object;
@@ -29,6 +30,7 @@ impl Control {
 pub struct Content {
     lua: Lua,
     lfn: Lfn,
+    lori_draw: Function,
     lori_update: Function,
     lori_keypressed: Function,
     lori_keyreleased: Function,
@@ -47,12 +49,16 @@ pub struct Content {
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
     ccd_solver: CCDSolver,
+
+    rx: Receiver<ContentCommand>,
+    lrx: Receiver<LfnCommand>,
+    tx: Sender<MainCommand>,
 }
 
 impl Content {
-    pub fn create(lua_code: String) -> Self {
+    pub fn create(lua_code: String, rx: Receiver<ContentCommand>, tx: Sender<MainCommand>) -> Self {
         let lua = Lua::new();
-        let (ltx, lrx) = bounded::<LfnCommand>(1);
+        let (ltx, lrx) = unbounded::<LfnCommand>();
         let lfn: Lfn = Lfn::new(&lua, ltx);
 
         _= lua.load(lua_code).exec().unwrap();
@@ -60,11 +66,24 @@ impl Content {
         let lhk: Table = lua.globals().get("lori").unwrap();
 
         let lori_load: Function = lhk.get("load").unwrap();
+        let lori_draw: Function = lhk.get("draw").unwrap();
         let lori_update: Function = lhk.get("update").unwrap();
         let lori_keypressed: Function = lhk.get("keypressed").unwrap();
         let lori_keyreleased: Function = lhk.get("keyreleased").unwrap();
 
+        
         _= lori_load.call::<()>(());
+        while let Ok(cmd) = lrx.try_recv() {
+            match cmd {
+                LfnCommand::SetWindowTitle { text } => {
+                    _= tx.send(MainCommand::SetWindowTitle { text });
+                },
+                LfnCommand::SetWindowSize { w, h } => {
+                    _= tx.send(MainCommand::SetWindowSize { w, h });
+                }
+            }
+        }
+
         
         let objects: Vec<Object> = Vec::new();
         
@@ -91,6 +110,7 @@ impl Content {
         Self {
             lua,
             lfn,
+            lori_draw,
             lori_update,
             lori_keypressed,
             lori_keyreleased,
@@ -109,10 +129,14 @@ impl Content {
             impulse_joints,
             multibody_joints,
             ccd_solver,
+
+            rx,
+            lrx,
+            tx,
         }
     }
 
-    pub fn thread_loop(&mut self, rx: Receiver<ContentCommand>, tx: Sender<MainCommand>) {
+    pub fn thread_loop(&mut self) {
         let mut loopit: bool = true;
         let interval: Duration = Duration::from_millis(5);
         let mut start = Instant::now() + interval;
@@ -122,9 +146,11 @@ impl Content {
             _= self.lori_update.call::<()>(());
             self.update_objects();
                 
-            while let Ok(cmd) = rx.try_recv() {
+            while let Ok(cmd) = self.rx.try_recv() {
                 match cmd {
                     ContentCommand::Render => {
+                        _= self.lori_draw.call::<()>(());
+                        
                         let mut new_double_locations: Vec<Vec<Location>> = Vec::new();
                         for i in 0..self.objects.len() {
                             let mut new_locations: Vec<Location> = Vec::new();
@@ -139,7 +165,7 @@ impl Content {
                             new_double_locations.push(new_locations);
                         }
                         
-                        _= tx.send(MainCommand::Render { instances: new_double_locations, camera: self.displacement });
+                        _= self.tx.send(MainCommand::Render { instances: new_double_locations, camera: self.displacement });
                     }
 
                     ContentCommand::Input { code, state } => {
@@ -152,6 +178,17 @@ impl Content {
     
                     ContentCommand::Exit => {
                         loopit = false;
+                    }
+                }
+            }
+
+            while let Ok(cmd) = self.lrx.try_recv() {
+                match cmd {
+                    LfnCommand::SetWindowTitle { text } => {
+                        _= self.tx.send(MainCommand::SetWindowTitle { text });
+                    },
+                    LfnCommand::SetWindowSize { w, h } => {
+                        _= self.tx.send(MainCommand::SetWindowSize { w, h });
                     }
                 }
             }

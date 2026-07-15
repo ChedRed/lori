@@ -1,9 +1,11 @@
 function lori.load()
-    print("Load")
+    lori.set.window.title("Lori Test Project")
 end
 
 function lori.keypressed(key)
     print("KEY PRESSED", key)
+    if key == "e" then
+    end
 end
 
 function lori.keyreleased(key)
@@ -11,5 +13,7 @@ function lori.keyreleased(key)
 end
 
 function lori.update()
-    
+end
+
+function lori.draw()
 end

@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::cmp::{max, min};
 use std::thread::JoinHandle;
 use winit::application::ApplicationHandler;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
-use crossbeam::channel::{bounded, Sender, Receiver};
+use crossbeam::channel::{Receiver, Sender, unbounded};
 
 pub mod utils;
 use utils::{Vertex, Location, MainCommand, ContentCommand};
@@ -83,16 +84,38 @@ impl State {
         let cap = surface.get_capabilities(&adapter);
         let surface_format = cap.formats[0];
 
-        let (content_tx, content_rx) = bounded::<ContentCommand>(1);
-        let (main_tx, main_rx) = bounded::<MainCommand>(1);
+        let (content_tx, content_rx) = unbounded::<ContentCommand>();
+        let (main_tx, main_rx) = unbounded::<MainCommand>();
 
         let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
-        let mut content = Content::create(lua_code);
-        let handle = Some(std::thread::spawn(move || { content.thread_loop(content_rx, main_tx); }));
+        let mut content = Content::create(lua_code, content_rx, main_tx);
+
+        let mut objects: Vec<GPUObject> = Vec::new();
+
+        while let Ok(cmd) = main_rx.try_recv() {
+            match cmd {
+                MainCommand::CreateObject { x, y, rotation } => {
+                    objects[0].spawn(x, y, rotation);
+                }
+                MainCommand::Render { instances, camera } => {
+                    
+                    
+                },
+                MainCommand::SetWindowTitle { text } => {
+                    _= window.set_title(text.as_str());
+                },
+                MainCommand::SetWindowSize { w, h } => {
+                    _= window.request_inner_size(LogicalSize { width: w, height: h });
+                }
+            }
+        }
+        
+        let handle = Some(std::thread::Builder::new()
+            .name("content".to_string())
+            .spawn(move || { content.thread_loop(); }).unwrap());
         
         let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
 
-        let objects: Vec<GPUObject> = Vec::new();
 
         let mut gpu_view: GPUView = GPUView::new();
         let min: f32 = min(size.width, size.height) as f32;
@@ -340,6 +363,16 @@ impl State {
                     self.gpu_view.position[0] = camera.position.x;
                     self.gpu_view.position[1] = camera.position.y;
                     self.gpu_view.rotation[0] = camera.rotation;
+                },
+                MainCommand::SetWindowTitle { text } => {
+                    self.window.set_title(text.as_str());
+                    
+                },
+                MainCommand::SetWindowSize { w, h } => {
+                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                    //     self.resize(PhysicalSize { width: w, height: h });
+                    // } // TODO: Wait...
+                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
                 }
             }
         }
