@@ -96,17 +96,14 @@ impl State {
             match cmd {
                 MainCommand::CreateObject { x, y, rotation } => {
                     objects[0].spawn(x, y, rotation);
-                }
-                MainCommand::Render { instances, camera } => {
-                    
-                    
                 },
                 MainCommand::SetWindowTitle { text } => {
                     _= window.set_title(text.as_str());
                 },
                 MainCommand::SetWindowSize { w, h } => {
                     _= window.request_inner_size(LogicalSize { width: w, height: h });
-                }
+                },
+                _ => {}
             }
         }
         

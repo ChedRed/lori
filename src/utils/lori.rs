@@ -8,6 +8,7 @@ pub struct Lfn {
 }
 
 impl Lfn {
+    #[allow(unused)]
     pub fn new(lua: &Lua, tx: Sender<LfnCommand>) -> Self {
         let tx2 = tx.clone();
         let tx3 = tx.clone();

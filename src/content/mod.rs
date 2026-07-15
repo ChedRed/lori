@@ -1,9 +1,8 @@
 use mlua::{Lua, Function, Table};
-use crate::utils::LfnCommand::SetWindowTitle;
 use crate::utils::lori::{Lfn, keycodes_transformer};
 
 use crate::utils::{ContentCommand, Displacement, LfnCommand, Location, MainCommand};
-use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
+use crossbeam::channel::{Receiver, Sender, unbounded};
 use std::time::{Duration, Instant};
 use rapier2d::prelude::*;
 pub mod object;
@@ -27,6 +26,7 @@ impl Control {
     }
 }
 
+#[allow(dead_code)]
 pub struct Content {
     lua: Lua,
     lfn: Lfn,

@@ -5,6 +5,7 @@ end
 function lori.keypressed(key)
     print("KEY PRESSED", key)
     if key == "e" then
+        local x, y = lori.get.window.size()
     end
 end
 
@@ -15,5 +16,5 @@ end
 function lori.update()
 end
 
-function lori.draw()
+function lori.render()
 end
