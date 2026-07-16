@@ -100,8 +100,9 @@ Lori = {
         --- @return Shape
         shape = function(type, x, y, w, h) return Shape end,
         --- @param vertices Vertex[]
+        --- @param indices integer[] | nil
         --- @return Shape
-        mesh = function(vertices) return Shape end,
+        mesh = function(vertices, indices) return Shape end,
         --- @param img string
         --- @return Shape
         image = function(img) return Shape end,
@@ -119,6 +120,10 @@ Lori = {
         --- @param points Point[]
         --- @return Border
         border = function(points) return Border end,
+        --- @param x number
+        --- @param y number
+        --- @param fx number
+        --- @param fy number
         --- @return Force
         force = function(x, y, fx, fy) return Force end,
     },
@@ -134,7 +139,21 @@ Lori = {
         --- @param y1 number
         --- @param x2 number
         --- @param y2 number
-        line = function(x1, y1, x2, y2) end
+        --- @return nil
+        line = function(x1, y1, x2, y2) end,
+        --- @param x number
+        --- @param y number
+        --- @param radius number
+        --- @return nil
+        circle = function(x, y, radius) end,
+        --- @param x number
+        --- @param y number
+        --- @param w number
+        --- @param h number
+        --- @param r number
+        --- @param anchor "center"|"top-left"|"top-right"|"bottom-left"|"bottom-right"
+        --- @return nil
+        rect = function(x, y, w, h, r, anchor) end
     },
 
     push = {

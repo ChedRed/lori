@@ -3,22 +3,45 @@ pub mod lori;
 
 use transform::Vector2;
 
-pub enum LfnCommand {
+pub enum MainLtxCommand {
     SetWindowTitle {
         text: String,
     },
     SetWindowSize {
         w: u32,
         h: u32,
-    }
+    },
+    SetWindowResizable {
+        is: bool,
+    },
+    GetWindowSize
+}
+
+pub enum MainLrxCommand {
+    Load,
+    Keypressed {
+        code: &'static str,
+    },
+    Keyreleased {
+        code: &'static str,
+    },
+    Render,
+    GetWindowSize {
+        w: u32,
+        h: u32,
+    },
+    Exit
+}
+
+pub enum ContentLtxCommand {
+}
+
+pub enum ContentLrxCommand {
+    Update,
 }
 
 #[derive(Clone)]
 pub enum ContentCommand {
-    Input {
-        code: winit::keyboard::KeyCode,
-        state: bool,
-    },
     Render,
     Exit,
 }
@@ -28,18 +51,6 @@ pub enum MainCommand {
     Render {
         instances: Vec<Vec<Location>>,
         camera: Displacement,
-    },
-    CreateObject {
-        x: f32,
-        y: f32,
-        rotation: f32,
-    },
-    SetWindowTitle {
-        text: String,
-    },
-    SetWindowSize {
-        w: u32,
-        h: u32,
     },
 }
 

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::cmp::{max, min};
 use std::thread::JoinHandle;
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalSize};
+use winit::dpi::{PhysicalSize};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
@@ -16,6 +16,10 @@ use utils::{Vertex, Location, MainCommand, ContentCommand};
 
 pub mod content;
 use content::{Content, object::GPUObject};
+
+use crate::utils::lori::{Lori, keycodes_transformer};
+use crate::utils::{MainLrxCommand, MainLtxCommand, ContentLrxCommand, ContentLtxCommand};
+
 
 
 #[repr(C)]
@@ -61,7 +65,10 @@ struct State {
     
     content_tx: Sender<ContentCommand>,
     main_rx: Receiver<MainCommand>,
-    handle: Option<JoinHandle<()>>,
+    lori_ltx: Sender<MainLrxCommand>,
+    lori_lrx: Receiver<MainLtxCommand>,
+    lori_handle: Option<JoinHandle<()>>,
+    content_handle: Option<JoinHandle<()>>,
 }
 
 impl State {
@@ -84,35 +91,49 @@ impl State {
         let cap = surface.get_capabilities(&adapter);
         let surface_format = cap.formats[0];
 
-        let (content_tx, content_rx) = unbounded::<ContentCommand>();
         let (main_tx, main_rx) = unbounded::<MainCommand>();
+        let (content_tx, content_rx) = unbounded::<ContentCommand>();
+
+        let (main_ltx, lori_lrx) = unbounded::<MainLtxCommand>();
+        let (lori_ltx, main_lrx) = unbounded::<MainLrxCommand>();
+
+        let (content_ltx, c_lori_lrx) = unbounded::<ContentLtxCommand>();
+        let (c_lori_ltx, content_lrx) = unbounded::<ContentLrxCommand>();
+        
 
         let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
-        let mut content = Content::create(lua_code, content_rx, main_tx);
+        let mut lori: Lori = Lori::new(lua_code, main_ltx, main_lrx, content_ltx, content_lrx);
+        let lori_handle = Some(std::thread::Builder::new()
+            .name("lori".to_string())
+            .spawn(move || { lori.begin(); }).unwrap());
+        
+        _= lori_ltx.send(MainLrxCommand::Load);
 
-        let mut objects: Vec<GPUObject> = Vec::new();
-
-        while let Ok(cmd) = main_rx.try_recv() {
+        while let Ok(cmd) = lori_lrx.try_recv() {
             match cmd {
-                MainCommand::CreateObject { x, y, rotation } => {
-                    objects[0].spawn(x, y, rotation);
-                },
-                MainCommand::SetWindowTitle { text } => {
+                MainLtxCommand::SetWindowTitle { text } => {
                     _= window.set_title(text.as_str());
                 },
-                MainCommand::SetWindowSize { w, h } => {
-                    _= window.request_inner_size(LogicalSize { width: w, height: h });
+                MainLtxCommand::SetWindowSize { w, h } => {
+                    _= window.request_inner_size(PhysicalSize { width: w, height: h });
+                },
+                MainLtxCommand::SetWindowResizable { is } => {
+                    window.set_resizable(is);
                 },
                 _ => {}
             }
         }
         
-        let handle = Some(std::thread::Builder::new()
+        let mut content = Content::create(main_tx, content_rx, c_lori_ltx, c_lori_lrx);
+
+        let mut objects: Vec<GPUObject> = Vec::new();
+        
+        let content_handle = Some(std::thread::Builder::new()
             .name("content".to_string())
             .spawn(move || { content.thread_loop(); }).unwrap());
         
         let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
-
+        
 
         let mut gpu_view: GPUView = GPUView::new();
         let min: f32 = min(size.width, size.height) as f32;
@@ -254,7 +275,10 @@ impl State {
             
             content_tx,
             main_rx,
-            handle,
+            lori_ltx,
+            lori_lrx,
+            lori_handle,
+            content_handle,
         };
 
         state.configure_surface();
@@ -310,7 +334,11 @@ impl State {
     }
     
     fn keyboard_inputs(&mut self, code: winit::keyboard::KeyCode, state: bool) {
-        _= self.content_tx.send(ContentCommand::Input { code, state });
+        if state {
+            _= self.lori_ltx.send(MainLrxCommand::Keypressed { code: keycodes_transformer(code) });
+        } else {
+            _= self.lori_ltx.send(MainLrxCommand::Keyreleased { code: keycodes_transformer(code) });
+        }
     }
 
     fn render(&mut self) {
@@ -346,12 +374,34 @@ impl State {
 
         renderpass.set_pipeline(&self.render_pipeline);
         
+        _= self.lori_ltx.send(MainLrxCommand::Render);
+        
+        if let Ok(cmd) = self.lori_lrx.try_recv() {
+            match cmd {
+                MainLtxCommand::SetWindowTitle { text } => {
+                    self.window.set_title(text.as_str());
+                    
+                },
+                MainLtxCommand::SetWindowSize { w, h } => {
+                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                    //     self.resize(PhysicalSize { width: w, height: h });
+                    // } // TODO: Wait...
+                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
+                },
+                MainLtxCommand::SetWindowResizable { is } => {
+                    _= self.window.set_resizable(is);
+                },
+                MainLtxCommand::GetWindowSize => {
+                    let size: PhysicalSize<u32> = self.window.inner_size();
+                    _= self.lori_ltx.send(MainLrxCommand::GetWindowSize { w: size.width, h: size.height });
+                }
+            }
+        }
+
+        
         _= self.content_tx.send(ContentCommand::Render);
         if let Ok(cmd) = self.main_rx.recv() {
             match cmd {
-                MainCommand::CreateObject { x, y, rotation } => {
-                    self.objects[0].spawn(x, y, rotation);
-                }
                 MainCommand::Render { instances, camera } => {
                     for i in 0..self.objects.len() {
                         self.queue.write_buffer(&self.objects[i].location_buffer, 0, bytemuck::cast_slice(&instances[i]));
@@ -361,16 +411,6 @@ impl State {
                     self.gpu_view.position[1] = camera.position.y;
                     self.gpu_view.rotation[0] = camera.rotation;
                 },
-                MainCommand::SetWindowTitle { text } => {
-                    self.window.set_title(text.as_str());
-                    
-                },
-                MainCommand::SetWindowSize { w, h } => {
-                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
-                    //     self.resize(PhysicalSize { width: w, height: h });
-                    // } // TODO: Wait...
-                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-                }
             }
         }
         
@@ -398,8 +438,13 @@ impl State {
     }
 
     fn exit(&mut self) {
+        _= self.lori_ltx.send(MainLrxCommand::Exit);
         _= self.content_tx.send(ContentCommand::Exit);
-        if let Some(join_handle) = self.handle.take() {
+        if let Some(join_handle) = self.lori_handle.take() {
+            _= join_handle.join();
+        };
+
+        if let Some(join_handle) = self.content_handle.take() {
             _= join_handle.join();
         };
     }
