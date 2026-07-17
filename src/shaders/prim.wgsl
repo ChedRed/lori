@@ -57,6 +57,10 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
                     }
                 }
             }
+        } else if (primitive.label == 1) {
+            let mult = clamp(primitive.r-distance(coords, vec2<f32>(primitive.xywh.x, primitive.xywh.y)), 0.0, 1.0);
+            color = color + (primitive.color - color)*mult;
+            break;
         }
     }
 

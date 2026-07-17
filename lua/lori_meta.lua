@@ -70,6 +70,24 @@ Lori = {
     --- @param key string
     --- @return nil
     keyreleased = function(key) end,
+    --- @param x number
+    --- @param y number
+    --- @param button integer
+    --- @return nil
+    mousepressed = function(x, y, button) end,
+    --- @param x number
+    --- @param y number
+    --- @param button integer
+    --- @return nil
+    mousereleased = function(x, y, button) end,
+    --- @param x number
+    --- @param y number
+    --- @return nil
+    mousemoved = function(x, y) end,
+    --- @param x number
+    --- @param y number
+    --- @return nil
+    mousescrolled = function(x, y) end,
     --- @return nil
     update = function() end,
     --- @return nil
@@ -95,6 +113,15 @@ Lori = {
             --- @return number
             --- @return number
             size = function() return 0, 0 end,
+        },
+        key = {
+            --- @param key string
+            --- @return boolean
+            state = function(key) return true end,
+        },
+        mouse = {
+            --- @return number[]
+            position = function() return {0, 0} end,
         }
     },
 
@@ -146,13 +173,15 @@ Lori = {
         --- @param y1 number
         --- @param x2 number
         --- @param y2 number
+        --- @param color number[]
         --- @return nil
-        line = function(x1, y1, x2, y2) end,
+        line = function(x1, y1, x2, y2, color) end,
         --- @param x number
         --- @param y number
         --- @param radius number
+        --- @param color number[]
         --- @return nil
-        circle = function(x, y, radius) end,
+        circle = function(x, y, radius, color) end,
         --- @param x number
         --- @param y number
         --- @param w number

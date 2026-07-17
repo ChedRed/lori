@@ -15,31 +15,53 @@ pub enum LoriToMainCommand {
         is: bool,
     },
     GetWindowSize,
-    DrawRect {
+    GetKeyPressed {
+        key: String,
+    },
+    DrawPrimitive {
         x: f32,
         y: f32,
         w: f32,
         h: f32,
         r: f32,
         color: [f32; 4],
+        label: u32,
     },
-    BreakLoop,
 }
 
 pub enum MainToLoriCommand {
-    GetWindowSize {
+    ReturnWindowSize {
         w: u32,
         h: u32,
     },
+    ReturnKeyPressed {
+        key: bool,
+    },    
 }
 
 pub enum MainToLoriCall {
     Load,
     Keypressed {
-        code: &'static str,
+        code: String,
     },
     Keyreleased {
-        code: &'static str,
+        code: String,
+    },
+    Mousepressed {
+        x: f32,
+        y: f32,
+        button: u32,
+    },
+    Mousereleased {
+        x: f32,
+        y: f32,
+        button: u32,
+    },
+    MouseMoved {
+        motion: (f32, f32),
+    },
+    MouseScrolled {
+        motion: (f32, f32),
     },
     Render,
     Exit
@@ -49,6 +71,10 @@ pub enum LoriToMainCall {
     Load,
     Keypressed,
     Keyreleased,
+    Mousepressed,
+    Mousereleased,
+    MouseMoved,
+    MouseScrolled,
     Render,
     GetWindowSize,
     Exit

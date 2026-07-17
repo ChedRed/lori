@@ -5,9 +5,11 @@ use std::cmp::{max, min};
 use std::thread::JoinHandle;
 use crossbeam::select;
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalSize};
-use winit::event::WindowEvent;
+use winit::dpi::PhysicalSize;
+use winit::event::MouseScrollDelta::{LineDelta, PixelDelta};
+use winit::event::{DeviceEvent, DeviceId, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::SmolStr;
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
 use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
@@ -18,7 +20,7 @@ use utils::{Vertex, Location, MainCommand, ContentCommand};
 pub mod content;
 use content::{Content, object::GPUObject};
 
-use crate::utils::lori::{Lori, keycodes_transformer};
+use crate::utils::lori::Lori;
 use crate::utils::{ContentLrxCommand, ContentLtxCommand, GPUPrimitives, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive};
 
 
@@ -54,6 +56,8 @@ struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     size: winit::dpi::PhysicalSize<u32>,
+    mouse: (f32, f32),
+    keys: Vec<String>,
     render_pipeline: wgpu::RenderPipeline,
     primitive_pipeline: wgpu::RenderPipeline,
 
@@ -81,6 +85,8 @@ struct State {
 
 impl State {
     async fn new(window: Arc<Window>) -> State {
+        let mouse: (f32, f32) = (0., 0.);
+        let keys: Vec<String> = Vec::new();
         let args: Vec<String> = env::args().collect();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -116,24 +122,6 @@ impl State {
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
-        
-        _= lori_call.send(MainToLoriCall::Load);
-        lori_back.recv().unwrap();
-        while let Ok(cmd) = lori_cmd.try_recv() {
-            match cmd {
-                LoriToMainCommand::SetWindowTitle { text } => {
-                    _= window.set_title(text.as_str());
-                },
-                LoriToMainCommand::SetWindowSize { w, h } => {
-                    _= window.request_inner_size(PhysicalSize { width: w, height: h });
-                },
-                LoriToMainCommand::SetWindowResizable { is } => {
-                    window.set_resizable(is);
-                },
-                _ => {}
-            }
-        }
-        println!("Beans");
         
         let mut content = Content::create(main_tx, content_rx, c_lori_ltx, c_lori_lrx);
 
@@ -341,6 +329,8 @@ impl State {
             device,
             queue,
             size,
+            mouse,
+            keys,
             render_pipeline,
             primitive_pipeline,
 
@@ -366,6 +356,9 @@ impl State {
             content_handle,
         };
 
+        _= state.lori_call.send(MainToLoriCall::Load);
+        state.handle_lori_loop();
+        
         state.configure_surface();
         state
     }
@@ -384,7 +377,7 @@ impl State {
             width: self.size.width,
             height: self.size.height,
             desired_maximum_frame_latency: 2,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
         };
         self.surface.configure(&self.device, &surface_config);
 
@@ -418,46 +411,65 @@ impl State {
         self.window_scale = [(size[0] as f32 - min) / 2., (size[1] as f32 - min) / 2., min, min];
     }
     
-    fn keyboard_inputs(&mut self, code: winit::keyboard::KeyCode, state: bool) {
+    fn keyboard_inputs(&mut self, key: String, state: bool) {
         if state {
-            _= self.lori_call.send(MainToLoriCall::Keypressed { code: keycodes_transformer(code) });
-            loop {
-                select! {
-                    recv(self.lori_cmd) -> cmd => {
-                        if let Ok(v) = cmd {
-                            match v {
-                                LoriToMainCommand::GetWindowSize => {
-                                    _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: self.size.width, h: self.size.height });
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    recv(self.lori_back) -> _ => {
-                        break
-                    }
-                }
-            }
+            self.keys.push(key.clone());
+            _= self.lori_call.send(MainToLoriCall::Keypressed { code: key });
         } else {
-            _= self.lori_call.send(MainToLoriCall::Keyreleased { code: keycodes_transformer(code) });
-            loop {
-                select! {
-                    recv(self.lori_cmd) -> cmd => {
-                        if let Ok(v) = cmd {
-                            match v {
-                                LoriToMainCommand::GetWindowSize => {
-                                    _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: self.size.width, h: self.size.height });
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    recv(self.lori_back) -> _ => {
-                        break
-                    }
-                }
+            self.keys.retain(|k| k != &key);
+            _= self.lori_call.send(MainToLoriCall::Keyreleased { code: key });
+        }
+        self.handle_lori_loop();
+    }
+
+    fn mouse_button_inputs(&mut self, button: MouseButton, state: bool) {
+        let numerical_button: u32;
+        match button {
+            MouseButton::Left => {
+                numerical_button = 1;
+            }
+            MouseButton::Right => {
+                numerical_button = 2;
+            }
+            MouseButton::Middle => {
+                numerical_button = 3;
+            }
+            MouseButton::Back => {
+                numerical_button = 4;
+            }
+            MouseButton::Forward => {
+                numerical_button = 5;
+            }
+            MouseButton::Other(num) => {
+                numerical_button = (6+num) as u32;
             }
         }
+        if state {
+            _= self.lori_call.send(MainToLoriCall::Mousepressed { x: self.mouse.0, y: self.mouse.1, button: numerical_button });
+        } else {
+            _= self.lori_call.send(MainToLoriCall::Mousereleased { x: self.mouse.0, y: self.mouse.1, button: numerical_button });
+        }
+        self.handle_lori_loop();
+    }
+
+    fn mouse_movement_inputs(&mut self, motion: (f64, f64)) {
+        let simple_motion: (f32, f32) = (motion.0 as f32, motion.1 as f32);
+        _= self.lori_call.send(MainToLoriCall::MouseMoved { motion: simple_motion });
+        self.handle_lori_loop();
+    }
+
+    fn mouse_scroll_inputs(&mut self, delta: MouseScrollDelta) {
+        let simple_motion: (f32, f32);
+        match delta {
+            PixelDelta(position) => {
+                simple_motion = (position.x as f32, position.y as f32);
+            }
+            LineDelta(x, y) => {
+                simple_motion = (x, y);
+            }
+        }
+        _= self.lori_call.send(MainToLoriCall::MouseScrolled { motion: simple_motion });
+        self.handle_lori_loop();
     }
 
     fn render(&mut self) {
@@ -525,64 +537,7 @@ impl State {
         renderpass.set_pipeline(&self.primitive_pipeline);
 
         _= self.lori_call.send(MainToLoriCall::Render);
-        loop {
-            select! {
-                recv(self.lori_cmd) -> cmd => {
-                    if let Ok(v) = cmd {
-                        match v {
-                            LoriToMainCommand::SetWindowTitle { text } => {
-                                self.window.set_title(text.as_str());
-                            },
-                            LoriToMainCommand::SetWindowSize { w, h } => {
-                                // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
-                                //     self.resize(PhysicalSize { width: w, height: h });
-                                // } // TODO: Wait...
-                                _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-                            },
-                            LoriToMainCommand::SetWindowResizable { is } => {
-                                _= self.window.set_resizable(is);
-                            },
-                            LoriToMainCommand::GetWindowSize => {
-                                let size: PhysicalSize<u32> = self.window.inner_size();
-                                _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: size.width, h: size.height });
-                            },
-                            LoriToMainCommand::DrawRect { x, y, w, h, r, color } => {
-                                self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                recv(self.lori_back) -> _ => {
-                    while let Ok(cmd) = self.lori_cmd.try_recv() {
-                        match cmd {
-                            LoriToMainCommand::SetWindowTitle { text } => {
-                                self.window.set_title(text.as_str());
-                            },
-                            LoriToMainCommand::SetWindowSize { w, h } => {
-                                // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
-                                //     self.resize(PhysicalSize { width: w, height: h });
-                                // } // TODO: Wait...
-                                _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-                            },
-                            LoriToMainCommand::SetWindowResizable { is } => {
-                                _= self.window.set_resizable(is);
-                            },
-                            LoriToMainCommand::GetWindowSize => {
-                                let size: PhysicalSize<u32> = self.window.inner_size();
-                                _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: size.width, h: size.height });
-                            },
-                            LoriToMainCommand::DrawRect { x, y, w, h, r, color } => {
-                                self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
-                            }
-                            _ => {}
-                        }
-                    }
-                    
-                    break;
-                }
-            }
-        }
+        self.handle_lori_loop();
         
         
         let mut primitive_box: GPUPrimitives = GPUPrimitives::from_vec(self.primitives.len() as u32, &self.primitives);
@@ -600,6 +555,51 @@ impl State {
         self.queue.submit(Some(encoder.finish()));
         self.window.pre_present_notify();
         self.queue.present(pretexture_view);
+    }
+
+    fn handle_lori_commands(&mut self, v: LoriToMainCommand) {
+        match v {
+            LoriToMainCommand::SetWindowTitle { text } => {
+                self.window.set_title(text.as_str());
+            },
+            LoriToMainCommand::SetWindowSize { w, h } => {
+                // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                //     self.resize(PhysicalSize { width: w, height: h });
+                // } // TODO: Wait...
+                _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
+            },
+            LoriToMainCommand::SetWindowResizable { is } => {
+                _= self.window.set_resizable(is);
+            },
+            LoriToMainCommand::GetWindowSize => {
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnWindowSize { w: self.size.width, h: self.size.height });
+            },
+            LoriToMainCommand::GetKeyPressed { key } => {
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnKeyPressed { key: self.keys.contains(&key) });
+            },
+            LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label } => {
+                self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label, _pad0: 0, _pad1: 0, color });
+            }
+        }
+    }
+    
+    fn handle_lori_loop(&mut self) {
+        loop {
+            select! {
+                recv(self.lori_cmd) -> cmd => {
+                    if let Ok(v) = cmd {
+                        self.handle_lori_commands(v);
+                    }
+                }
+                recv(self.lori_back) -> _ => {
+                    while let Ok(cmd) = self.lori_cmd.try_recv() {
+                        self.handle_lori_commands(cmd);
+                    }
+                    
+                    break;
+                }
+            }
+        }
     }
 
     fn exit(&mut self) {
@@ -645,17 +645,30 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => {
                 superstate.resize(size);
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    winit::event::KeyEvent {
-                        physical_key: winit::keyboard::PhysicalKey::Code(code),
-                        state: key_state,
-                        ..
-                    },
-                ..
-            } => superstate.keyboard_inputs(code, key_state.is_pressed()),
+            WindowEvent::KeyboardInput { event, .. } => {
+                let newtext: String = event.text.unwrap_or_else(|| SmolStr::new("NONE")).to_string();
+                superstate.keyboard_inputs(newtext, event.state.is_pressed());
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                superstate.mouse_button_inputs(button, state.is_pressed());
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                superstate.mouse = (position.x as f32, position.y as f32);
+            }
             _ => (),
-            
+        }
+    }
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _id: DeviceId, event: DeviceEvent) {
+        let superstate = self.state.as_mut().unwrap();
+
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                superstate.mouse_movement_inputs(delta);
+            }
+            DeviceEvent::MouseWheel { delta } => {
+                superstate.mouse_scroll_inputs(delta);
+            }
+            _ => {}
         }
     }
 }

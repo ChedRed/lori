@@ -9,10 +9,14 @@ pub struct Lori {
     content_rx: Receiver<ContentLrxCommand>,
 
     lori_load: mlua::Function,
-    lori_render: mlua::Function,
-    lori_update: mlua::Function,
     lori_keypressed: mlua::Function,
     lori_keyreleased: mlua::Function,
+    lori_mousepressed: mlua::Function,
+    lori_mousereleased: mlua::Function,
+    lori_mousemoved: mlua::Function,
+    lori_mousescrolled: mlua::Function,
+    lori_update: mlua::Function,
+    lori_render: mlua::Function,
 }
 
 impl Lori {
@@ -25,9 +29,12 @@ impl Lori {
         let tx4 = tx.clone();
         let tx5 = tx.clone();
         let tx6 = tx.clone();
+        let tx7 = tx.clone();
+        let tx8 = tx.clone();
         
         let rx = main_rtrn.clone();
         let rx2 = rx.clone();
+        let rx3 = rx.clone();
         let lori = lua.create_table().unwrap();
         
         let set = lua.create_table().unwrap();
@@ -56,21 +63,41 @@ impl Lori {
             _= tx5.try_send(LoriToMainCommand::GetWindowSize);
             while let Ok(cmd) = rx2.recv() {
                 match cmd {
-                    MainToLoriCommand::GetWindowSize { w, h } => {
+                    MainToLoriCommand::ReturnWindowSize { w, h } => {
                         nw = w;
                         nh = h;
                         break;
                     }
-                    _ => {} // TODO: Not that
+                    _ => {}
                 }
             }
             Ok((nw, nh))
+        }).unwrap());
+            
+        let get_key = lua.create_table().unwrap();
+        _= get_key.set("state", lua.create_function(move |_, key| {
+            let mut pressed: bool = false;
+            _= tx8.try_send(LoriToMainCommand::GetKeyPressed { key });
+            while let Ok(cmd) = rx3.recv() {
+                match cmd {
+                    MainToLoriCommand::ReturnKeyPressed { key } => {
+                        pressed = key;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(pressed)
         }).unwrap());
         
         let new = lua.create_table().unwrap();
         let draw = lua.create_table().unwrap();
         _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {
-            _= tx6.send(LoriToMainCommand::DrawRect { x, y, w, h, r, color });
+            _= tx6.send(LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label: 0 });
+            Ok(())
+        }).unwrap());
+        _= draw.set("circle", lua.create_function(move |_, (x, y, r, color)| {
+            _= tx7.send(LoriToMainCommand::DrawPrimitive { x, y, w: 0., h: 0., r, color, label: 1 });
             Ok(())
         }).unwrap());
         let push = lua.create_table().unwrap();
@@ -78,6 +105,7 @@ impl Lori {
 
         
         _= set.set("window", set_window);
+        _= get.set("key", get_key);
         _= get.set("window", get_window);
         _= lori.set("set", set);
         _= lori.set("get", get);
@@ -87,24 +115,30 @@ impl Lori {
         let lhk: mlua::Table = lua.globals().get("lori").unwrap();
 
         let lori_load: mlua::Function = lhk.get("load").unwrap();
-        let lori_render: mlua::Function = lhk.get("render").unwrap();
-        let lori_update: mlua::Function = lhk.get("update").unwrap();
         let lori_keypressed: mlua::Function = lhk.get("keypressed").unwrap();
         let lori_keyreleased: mlua::Function = lhk.get("keyreleased").unwrap();
+        let lori_mousepressed: mlua::Function = lhk.get("mousepressed").unwrap();
+        let lori_mousereleased: mlua::Function = lhk.get("mousereleased").unwrap();
+        let lori_mousemoved: mlua::Function = lhk.get("mousemoved").unwrap();
+        let lori_mousescrolled: mlua::Function = lhk.get("mousescrolled").unwrap();
+        let lori_update: mlua::Function = lhk.get("update").unwrap();
+        let lori_render: mlua::Function = lhk.get("render").unwrap();
         
         Self {
             lua,
-            // main_tx,
             main_call,
             main_back,
-            // content_tx,
             content_rx,
 
             lori_load,
-            lori_render,
-            lori_update,
             lori_keypressed,
             lori_keyreleased,
+            lori_mousepressed,
+            lori_mousereleased,
+            lori_mousemoved,
+            lori_mousescrolled,
+            lori_update,
+            lori_render,
         }
     }
 
@@ -117,23 +151,38 @@ impl Lori {
                             MainToLoriCall::Load => {
                                 _= self.lori_load.call::<()>(());
                                 _= self.main_back.send(LoriToMainCall::Load);
-                            },
+                            }
                             MainToLoriCall::Keypressed { code } => {
                                 _= self.lori_keypressed.call::<()>(code);
                                 _= self.main_back.send(LoriToMainCall::Keypressed);
-                            },
+                            }
                             MainToLoriCall::Keyreleased { code } => {
                                 _= self.lori_keyreleased.call::<()>(code);
                                 _= self.main_back.send(LoriToMainCall::Keyreleased);
-                            },
+                            }
+                            MainToLoriCall::Mousepressed { x, y, button } => {
+                                _= self.lori_mousepressed.call::<()>((x, y, button));
+                                _= self.main_back.send(LoriToMainCall::Mousepressed);
+                            }
+                            MainToLoriCall::Mousereleased { x, y, button } => {
+                                _= self.lori_mousereleased.call::<()>((x, y, button));
+                                _= self.main_back.send(LoriToMainCall::Mousereleased);
+                            }
+                            MainToLoriCall::MouseMoved { motion } => {
+                                _= self.lori_mousemoved.call::<()>((motion.0, motion.1));
+                                _= self.main_back.send(LoriToMainCall::MouseMoved);
+                            }
+                            MainToLoriCall::MouseScrolled { motion } => {
+                                _= self.lori_mousescrolled.call::<()>((motion.0, motion.1));
+                                _= self.main_back.send(LoriToMainCall::MouseScrolled);
+                            }
                             MainToLoriCall::Render => {
                                 _= self.lori_render.call::<()>(());
                                 _= self.main_back.send(LoriToMainCall::Render);
-                            },
+                            }
                             MainToLoriCall::Exit => {
                                 break;
-                            },
-                            _ => {}
+                            }
                         }
                     }
                 },
@@ -148,37 +197,5 @@ impl Lori {
                 }
             }
         }
-    }
-}
-
-pub fn keycodes_transformer(code: winit::keyboard::KeyCode) -> &'static str {
-    match code {
-        winit::keyboard::KeyCode::KeyA => "a",
-        winit::keyboard::KeyCode::KeyB => "b",
-        winit::keyboard::KeyCode::KeyC => "c",
-        winit::keyboard::KeyCode::KeyD => "d",
-        winit::keyboard::KeyCode::KeyE => "e",
-        winit::keyboard::KeyCode::KeyF => "f",
-        winit::keyboard::KeyCode::KeyG => "g",
-        winit::keyboard::KeyCode::KeyH => "h",
-        winit::keyboard::KeyCode::KeyI => "i",
-        winit::keyboard::KeyCode::KeyJ => "j",
-        winit::keyboard::KeyCode::KeyK => "k",
-        winit::keyboard::KeyCode::KeyL => "l",
-        winit::keyboard::KeyCode::KeyM => "m",
-        winit::keyboard::KeyCode::KeyN => "n",
-        winit::keyboard::KeyCode::KeyO => "o",
-        winit::keyboard::KeyCode::KeyP => "p",
-        winit::keyboard::KeyCode::KeyQ => "q",
-        winit::keyboard::KeyCode::KeyR => "r",
-        winit::keyboard::KeyCode::KeyS => "s",
-        winit::keyboard::KeyCode::KeyT => "t",
-        winit::keyboard::KeyCode::KeyU => "u",
-        winit::keyboard::KeyCode::KeyV => "v",
-        winit::keyboard::KeyCode::KeyW => "w",
-        winit::keyboard::KeyCode::KeyX => "x",
-        winit::keyboard::KeyCode::KeyY => "y",
-        winit::keyboard::KeyCode::KeyZ => "z",
-        _ => "NONE",
     }
 }
