@@ -19,6 +19,7 @@ function lori.update()
 end
 
 function lori.render()
+    local x, y = lori.get.window.size()
     lori.draw.rect(100, 100, 200, 200, 0, {1, 1, 0, 1});
     lori.draw.rect(400, 500, 300, 250, 0, {0, 1, 1, 1});
 end

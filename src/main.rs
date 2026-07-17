@@ -3,6 +3,7 @@ use std::{env, fs};
 use std::sync::Arc;
 use std::cmp::{max, min};
 use std::thread::JoinHandle;
+use crossbeam::select;
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalSize};
 use winit::event::WindowEvent;
@@ -18,7 +19,7 @@ pub mod content;
 use content::{Content, object::GPUObject};
 
 use crate::utils::lori::{Lori, keycodes_transformer};
-use crate::utils::{ContentLrxCommand, ContentLtxCommand, GPUPrimitives, MainLrxCommand, MainLtxCommand, Primitive};
+use crate::utils::{ContentLrxCommand, ContentLtxCommand, GPUPrimitives, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive};
 
 
 
@@ -70,8 +71,10 @@ struct State {
     
     content_tx: Sender<ContentCommand>,
     main_rx: Receiver<MainCommand>,
-    lori_ltx: Sender<MainLrxCommand>,
-    lori_lrx: Receiver<MainLtxCommand>,
+    lori_call: Sender<MainToLoriCall>,
+    lori_back: Receiver<LoriToMainCall>,
+    lori_cmd: Receiver<LoriToMainCommand>,
+    lori_rtrn: Sender<MainToLoriCommand>,
     lori_handle: Option<JoinHandle<()>>,
     content_handle: Option<JoinHandle<()>>,
 }
@@ -99,35 +102,38 @@ impl State {
         let (main_tx, main_rx) = unbounded::<MainCommand>();
         let (content_tx, content_rx) = unbounded::<ContentCommand>();
 
-        let (main_ltx, lori_lrx) = unbounded::<MainLtxCommand>();
-        let (lori_ltx, main_lrx) = bounded::<MainLrxCommand>(0);
+        let (main_cmd, lori_cmd) = unbounded::<LoriToMainCommand>();
+        let (lori_rtrn, main_rtrn) = unbounded::<MainToLoriCommand>();
+        let (lori_call, main_call) = bounded::<MainToLoriCall>(0);
+        let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
         let (content_ltx, c_lori_lrx) = unbounded::<ContentLtxCommand>();
         let (c_lori_ltx, content_lrx) = unbounded::<ContentLrxCommand>();
         
 
         let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
-        let mut lori: Lori = Lori::new(lua_code, main_ltx, main_lrx, content_ltx, content_lrx);
+        let mut lori: Lori = Lori::new(lua_code, main_cmd, main_rtrn, main_call, main_back, content_ltx, content_lrx);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
         
-        _= lori_ltx.send(MainLrxCommand::Load);
-
-        while let Ok(cmd) = lori_lrx.try_recv() {
+        _= lori_call.send(MainToLoriCall::Load);
+        lori_back.recv().unwrap();
+        while let Ok(cmd) = lori_cmd.try_recv() {
             match cmd {
-                MainLtxCommand::SetWindowTitle { text } => {
+                LoriToMainCommand::SetWindowTitle { text } => {
                     _= window.set_title(text.as_str());
                 },
-                MainLtxCommand::SetWindowSize { w, h } => {
+                LoriToMainCommand::SetWindowSize { w, h } => {
                     _= window.request_inner_size(PhysicalSize { width: w, height: h });
                 },
-                MainLtxCommand::SetWindowResizable { is } => {
+                LoriToMainCommand::SetWindowResizable { is } => {
                     window.set_resizable(is);
                 },
                 _ => {}
             }
         }
+        println!("Beans");
         
         let mut content = Content::create(main_tx, content_rx, c_lori_ltx, c_lori_lrx);
 
@@ -352,8 +358,10 @@ impl State {
             
             content_tx,
             main_rx,
-            lori_ltx,
-            lori_lrx,
+            lori_call,
+            lori_back,
+            lori_cmd,
+            lori_rtrn,
             lori_handle,
             content_handle,
         };
@@ -412,9 +420,43 @@ impl State {
     
     fn keyboard_inputs(&mut self, code: winit::keyboard::KeyCode, state: bool) {
         if state {
-            _= self.lori_ltx.send(MainLrxCommand::Keypressed { code: keycodes_transformer(code) });
+            _= self.lori_call.send(MainToLoriCall::Keypressed { code: keycodes_transformer(code) });
+            loop {
+                select! {
+                    recv(self.lori_cmd) -> cmd => {
+                        if let Ok(v) = cmd {
+                            match v {
+                                LoriToMainCommand::GetWindowSize => {
+                                    _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: self.size.width, h: self.size.height });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    recv(self.lori_back) -> _ => {
+                        break
+                    }
+                }
+            }
         } else {
-            _= self.lori_ltx.send(MainLrxCommand::Keyreleased { code: keycodes_transformer(code) });
+            _= self.lori_call.send(MainToLoriCall::Keyreleased { code: keycodes_transformer(code) });
+            loop {
+                select! {
+                    recv(self.lori_cmd) -> cmd => {
+                        if let Ok(v) = cmd {
+                            match v {
+                                LoriToMainCommand::GetWindowSize => {
+                                    _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: self.size.width, h: self.size.height });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    recv(self.lori_back) -> _ => {
+                        break
+                    }
+                }
+            }
         }
     }
 
@@ -479,37 +521,73 @@ impl State {
             renderpass.draw_indexed(0..self.objects[i].indices.len() as u32, 0, 0..self.objects[i].locations.len() as _);
         }
 
-        renderpass.set_pipeline(&self.primitive_pipeline);
-        _= self.lori_ltx.send(MainLrxCommand::Render);
-        self.primitives.clear();
         
-        while let Ok(cmd) = self.lori_lrx.try_recv() {
-            match cmd {
-                MainLtxCommand::SetWindowTitle { text } => {
-                    self.window.set_title(text.as_str());
-                },
-                MainLtxCommand::SetWindowSize { w, h } => {
-                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
-                    //     self.resize(PhysicalSize { width: w, height: h });
-                    // } // TODO: Wait...
-                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-                },
-                MainLtxCommand::SetWindowResizable { is } => {
-                    _= self.window.set_resizable(is);
-                },
-                MainLtxCommand::GetWindowSize => {
-                    let size: PhysicalSize<u32> = self.window.inner_size();
-                    _= self.lori_ltx.send(MainLrxCommand::GetWindowSize { w: size.width, h: size.height });
-                },
-                MainLtxCommand::DrawRect { x, y, w, h, r, color } => {
-                    self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
+        renderpass.set_pipeline(&self.primitive_pipeline);
+
+        _= self.lori_call.send(MainToLoriCall::Render);
+        loop {
+            select! {
+                recv(self.lori_cmd) -> cmd => {
+                    if let Ok(v) = cmd {
+                        match v {
+                            LoriToMainCommand::SetWindowTitle { text } => {
+                                self.window.set_title(text.as_str());
+                            },
+                            LoriToMainCommand::SetWindowSize { w, h } => {
+                                // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                                //     self.resize(PhysicalSize { width: w, height: h });
+                                // } // TODO: Wait...
+                                _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
+                            },
+                            LoriToMainCommand::SetWindowResizable { is } => {
+                                _= self.window.set_resizable(is);
+                            },
+                            LoriToMainCommand::GetWindowSize => {
+                                let size: PhysicalSize<u32> = self.window.inner_size();
+                                _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: size.width, h: size.height });
+                            },
+                            LoriToMainCommand::DrawRect { x, y, w, h, r, color } => {
+                                self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                recv(self.lori_back) -> _ => {
+                    while let Ok(cmd) = self.lori_cmd.try_recv() {
+                        match cmd {
+                            LoriToMainCommand::SetWindowTitle { text } => {
+                                self.window.set_title(text.as_str());
+                            },
+                            LoriToMainCommand::SetWindowSize { w, h } => {
+                                // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                                //     self.resize(PhysicalSize { width: w, height: h });
+                                // } // TODO: Wait...
+                                _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
+                            },
+                            LoriToMainCommand::SetWindowResizable { is } => {
+                                _= self.window.set_resizable(is);
+                            },
+                            LoriToMainCommand::GetWindowSize => {
+                                let size: PhysicalSize<u32> = self.window.inner_size();
+                                _= self.lori_rtrn.send(MainToLoriCommand::GetWindowSize { w: size.width, h: size.height });
+                            },
+                            LoriToMainCommand::DrawRect { x, y, w, h, r, color } => {
+                                self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
+                            }
+                            _ => {}
+                        }
+                    }
+                    
+                    break;
                 }
             }
         }
-
-
+        
+        
         let mut primitive_box: GPUPrimitives = GPUPrimitives::from_vec(self.primitives.len() as u32, &self.primitives);
         primitive_box.scale = [self.size.width as f32, self.size.height as f32];
+        self.primitives.clear();
 
         self.queue.write_buffer(&self.primitive_buffer, 0, &bytemuck::bytes_of(&[primitive_box]));
         renderpass.set_bind_group(0, &self.primitive_bind_group, &[]);
@@ -525,7 +603,7 @@ impl State {
     }
 
     fn exit(&mut self) {
-        _= self.lori_ltx.send(MainLrxCommand::Exit);
+        _= self.lori_call.send(MainToLoriCall::Exit);
         _= self.content_tx.send(ContentCommand::Exit);
         if let Some(join_handle) = self.lori_handle.take() {
             _= join_handle.join();

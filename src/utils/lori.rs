@@ -1,10 +1,11 @@
 use crossbeam::{channel::{Receiver, Sender}, select};
 
-use crate::utils::{MainLtxCommand, MainLrxCommand, ContentLtxCommand, ContentLrxCommand};
+use crate::utils::{ContentLrxCommand, ContentLtxCommand, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
 
 pub struct Lori {
     lua: mlua::Lua,
-    main_rx: Receiver<MainLrxCommand>,
+    main_call: Receiver<MainToLoriCall>,
+    main_back: Sender<LoriToMainCall>,
     content_rx: Receiver<ContentLrxCommand>,
 
     lori_load: mlua::Function,
@@ -15,34 +16,34 @@ pub struct Lori {
 }
 
 impl Lori {
-    pub fn new(code: String, main_tx: Sender<MainLtxCommand>, main_rx: Receiver<MainLrxCommand>, content_tx: Sender<ContentLtxCommand>, content_rx: Receiver<ContentLrxCommand>) -> Self {
+    pub fn new(code: String, main_cmd: Sender<LoriToMainCommand>, main_rtrn: Receiver<MainToLoriCommand>, main_call: Receiver<MainToLoriCall>, main_back: Sender<LoriToMainCall>, content_tx: Sender<ContentLtxCommand>, content_rx: Receiver<ContentLrxCommand>) -> Self {
         let lua = mlua::Lua::new();
 
-        let tx = main_tx.clone();
+        let tx = main_cmd.clone();
         let tx2 = tx.clone();
         let tx3 = tx.clone();
         let tx4 = tx.clone();
         let tx5 = tx.clone();
         let tx6 = tx.clone();
         
-        let rx = main_rx.clone();
+        let rx = main_rtrn.clone();
         let rx2 = rx.clone();
         let lori = lua.create_table().unwrap();
         
         let set = lua.create_table().unwrap();
         let set_window = lua.create_table().unwrap();
         _= set_window.set("title", lua.create_function(move |_, text| { // lori.set.window.title
-            _= tx2.send(MainLtxCommand::SetWindowTitle { text });
+            _= tx2.send(LoriToMainCommand::SetWindowTitle { text });
             Ok(())
         }).unwrap());
 
         _= set_window.set("size", lua.create_function(move |_, (w, h)| { // lori.set.window.size
-            _= tx3.send(MainLtxCommand::SetWindowSize { w, h });
+            _= tx3.send(LoriToMainCommand::SetWindowSize { w, h });
             Ok(())
         }).unwrap());
 
         _= set_window.set("resizable", lua.create_function(move |_, is| { // lori.set.window.size
-            _= tx4.send(MainLtxCommand::SetWindowResizable { is });
+            _= tx4.send(LoriToMainCommand::SetWindowResizable { is });
             Ok(())
         }).unwrap());
 
@@ -52,10 +53,10 @@ impl Lori {
         _= get_window.set("size", lua.create_function(move |_, ()| {
             let mut nw: u32 = 0;
             let mut nh: u32 = 0;
-            _= tx5.try_send(MainLtxCommand::GetWindowSize);
+            _= tx5.try_send(LoriToMainCommand::GetWindowSize);
             while let Ok(cmd) = rx2.recv() {
                 match cmd {
-                    MainLrxCommand::GetWindowSize { w, h } => {
+                    MainToLoriCommand::GetWindowSize { w, h } => {
                         nw = w;
                         nh = h;
                         break;
@@ -69,7 +70,7 @@ impl Lori {
         let new = lua.create_table().unwrap();
         let draw = lua.create_table().unwrap();
         _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {
-            _= tx6.send(MainLtxCommand::DrawRect { x, y, w, h, r, color });
+            _= tx6.send(LoriToMainCommand::DrawRect { x, y, w, h, r, color });
             Ok(())
         }).unwrap());
         let push = lua.create_table().unwrap();
@@ -94,7 +95,8 @@ impl Lori {
         Self {
             lua,
             // main_tx,
-            main_rx,
+            main_call,
+            main_back,
             // content_tx,
             content_rx,
 
@@ -107,23 +109,28 @@ impl Lori {
     }
 
     pub fn begin(&mut self) {
-        _= self.lori_load.call::<()>(());
-
         loop {
             select! {
-                recv(self.main_rx) -> cmd => {
+                recv(self.main_call) -> cmd => {
                     if let Ok(v) = cmd {
                         match v {
-                            MainLrxCommand::Keypressed { code } => {
+                            MainToLoriCall::Load => {
+                                _= self.lori_load.call::<()>(());
+                                _= self.main_back.send(LoriToMainCall::Load);
+                            },
+                            MainToLoriCall::Keypressed { code } => {
                                 _= self.lori_keypressed.call::<()>(code);
+                                _= self.main_back.send(LoriToMainCall::Keypressed);
                             },
-                            MainLrxCommand::Keyreleased { code } => {
+                            MainToLoriCall::Keyreleased { code } => {
                                 _= self.lori_keyreleased.call::<()>(code);
+                                _= self.main_back.send(LoriToMainCall::Keyreleased);
                             },
-                            MainLrxCommand::Render => {
+                            MainToLoriCall::Render => {
                                 _= self.lori_render.call::<()>(());
+                                _= self.main_back.send(LoriToMainCall::Render);
                             },
-                            MainLrxCommand::Exit => {
+                            MainToLoriCall::Exit => {
                                 break;
                             },
                             _ => {}

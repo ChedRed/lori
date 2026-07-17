@@ -3,7 +3,7 @@ pub mod lori;
 
 use transform::Vector2;
 
-pub enum MainLtxCommand {
+pub enum LoriToMainCommand {
     SetWindowTitle {
         text: String,
     },
@@ -23,9 +23,17 @@ pub enum MainLtxCommand {
         r: f32,
         color: [f32; 4],
     },
+    BreakLoop,
 }
 
-pub enum MainLrxCommand {
+pub enum MainToLoriCommand {
+    GetWindowSize {
+        w: u32,
+        h: u32,
+    },
+}
+
+pub enum MainToLoriCall {
     Load,
     Keypressed {
         code: &'static str,
@@ -34,10 +42,15 @@ pub enum MainLrxCommand {
         code: &'static str,
     },
     Render,
-    GetWindowSize {
-        w: u32,
-        h: u32,
-    },
+    Exit
+}
+
+pub enum LoriToMainCall {
+    Load,
+    Keypressed,
+    Keyreleased,
+    Render,
+    GetWindowSize,
     Exit
 }
 
