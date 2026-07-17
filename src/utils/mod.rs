@@ -14,7 +14,15 @@ pub enum MainLtxCommand {
     SetWindowResizable {
         is: bool,
     },
-    GetWindowSize
+    GetWindowSize,
+    DrawRect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        r: f32,
+        color: [f32; 4],
+    },
 }
 
 pub enum MainLrxCommand {
@@ -141,5 +149,55 @@ impl Displacement {
             velocity: Vector2::new(),
             rotation: 0.,
         }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Primitive {
+    pub xywh: [f32; 4],
+    pub angle: f32,
+    pub label: u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub color: [f32; 4],
+}
+
+impl Primitive {
+    pub fn new() -> Self {
+        Self {
+            xywh: [0., 0., 0., 0.],
+            angle: 0.,
+            label: 0,
+            _pad0: 0,
+            _pad1: 0,
+            color: [0., 0., 0., 0.],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GPUPrimitives {
+    pub count: u32,
+    pub _pad: u32,
+    pub scale: [f32; 2],
+    pub data: [Primitive; 256],
+}
+
+impl GPUPrimitives {
+    pub fn from_vec(size: u32, data: &[Primitive]) -> Self {
+        let mut primitives = GPUPrimitives {
+            count: size,
+            _pad: 0,
+            scale: [0., 0.],
+            data: [Primitive { xywh: [0., 0., 0., 0.], angle: 0., label: 0, _pad0: 0, _pad1: 0, color: [0., 0., 0., 0.]}; 256],
+        };
+
+        for (i, p) in data.iter().take(256).enumerate() {
+            primitives.data[i] = *p;
+        }
+    
+        primitives
     }
 }

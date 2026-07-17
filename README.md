@@ -65,4 +65,5 @@ None of these functions have been implemented.
 TODO:
 - Enforce at least one physics tick before rendering, unless lori.load is not present
 - Add the rest of the functions ([=] and [-] means fully implemented, but [-] is untested/able)
+- Split crossbeams between lori and main into categories (eg. have keypresses on a separate beam)
 ```

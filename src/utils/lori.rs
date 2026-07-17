@@ -4,9 +4,7 @@ use crate::utils::{MainLtxCommand, MainLrxCommand, ContentLtxCommand, ContentLrx
 
 pub struct Lori {
     lua: mlua::Lua,
-    // main_tx: Sender<MainLtxCommand>,
     main_rx: Receiver<MainLrxCommand>,
-    content_tx: Sender<ContentLtxCommand>,
     content_rx: Receiver<ContentLrxCommand>,
 
     lori_load: mlua::Function,
@@ -19,12 +17,15 @@ pub struct Lori {
 impl Lori {
     pub fn new(code: String, main_tx: Sender<MainLtxCommand>, main_rx: Receiver<MainLrxCommand>, content_tx: Sender<ContentLtxCommand>, content_rx: Receiver<ContentLrxCommand>) -> Self {
         let lua = mlua::Lua::new();
+
         let tx = main_tx.clone();
-        let rx = main_rx.clone();
         let tx2 = tx.clone();
         let tx3 = tx.clone();
         let tx4 = tx.clone();
         let tx5 = tx.clone();
+        let tx6 = tx.clone();
+        
+        let rx = main_rx.clone();
         let rx2 = rx.clone();
         let lori = lua.create_table().unwrap();
         
@@ -67,6 +68,10 @@ impl Lori {
         
         let new = lua.create_table().unwrap();
         let draw = lua.create_table().unwrap();
+        _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {
+            _= tx6.send(MainLtxCommand::DrawRect { x, y, w, h, r, color });
+            Ok(())
+        }).unwrap());
         let push = lua.create_table().unwrap();
         let delete = lua.create_table().unwrap();
 
@@ -75,6 +80,7 @@ impl Lori {
         _= get.set("window", get_window);
         _= lori.set("set", set);
         _= lori.set("get", get);
+        _= lori.set("draw", draw);
         _= lua.globals().set("lori", lori.clone());
         lua.load(code).exec().unwrap();
         let lhk: mlua::Table = lua.globals().get("lori").unwrap();
@@ -89,7 +95,7 @@ impl Lori {
             lua,
             // main_tx,
             main_rx,
-            content_tx,
+            // content_tx,
             content_rx,
 
             lori_load,
@@ -137,76 +143,6 @@ impl Lori {
         }
     }
 }
-
-// pub struct Lfn {
-//     pub lori: Table,
-// }
-
-// impl Lfn {
-//     #[allow(unused)]
-//     pub fn new(lua: &Lua, tx: Sender<LfnCommand>, rx: Receiver<LfnRCommand>) -> Self {
-//         let tx2 = tx.clone();
-//         let tx3 = tx.clone();
-//         let tx4 = tx.clone();
-//         let tx5 = tx.clone();
-//         let lori = lua.create_table().unwrap();
-        
-//         let set = lua.create_table().unwrap();
-//         let set_window = lua.create_table().unwrap();
-//         _= set_window.set("title", lua.create_function(move |_, text| { // lori.set.window.title
-//             _= tx2.send(LfnCommand::SetWindowTitle { text });
-//             Ok(())
-//         }).unwrap());
-
-//         _= set_window.set("size", lua.create_function(move |_, (w, h)| { // lori.set.window.size
-//             _= tx3.send(LfnCommand::SetWindowSize { w, h });
-//             Ok(())
-//         }).unwrap());
-
-//         _= set_window.set("resizable", lua.create_function(move |_, (is)| { // lori.set.window.size
-//             _= tx4.send(LfnCommand::SetWindowResizable { is });
-//             Ok(())
-//         }).unwrap());
-
-            
-//         let get = lua.create_table().unwrap();
-//         let get_window = lua.create_table().unwrap();
-//         _= get_window.set("size", lua.create_function(move |_, ()| {
-//             let mut nw: u32 = 0;
-//             let mut nh: u32 = 0;
-//             _= tx5.try_send(LfnCommand::GetWindowSize);
-//             let cmd = rx.recv();
-//             match cmd {
-//                 Ok(LfnRCommand::GetWindowSize { w, h }) => {
-//                     nw = w;
-//                     nh = h;
-//                 },
-//                 Err(e) => {}
-//             }
-//             Ok((nw, nh))
-//         }).unwrap());
-//         let new = lua.create_table().unwrap();
-//         let draw = lua.create_table().unwrap();
-//         let push = lua.create_table().unwrap();
-//         let delete = lua.create_table().unwrap();
-
-        
-//         _= set.set("window", set_window);
-//         _= get.set("window", get_window);
-//         _= lori.set("set", set);
-//         _= lori.set("get", get);
-//         _= lua.globals().set("lori", lori.clone());
-
-//         Self {
-//             lori,
-//         }
-//     }
-// }
-
-// pub struct Lhk {
-//     pub lori: Table
-// }
-
 
 pub fn keycodes_transformer(code: winit::keyboard::KeyCode) -> &'static str {
     match code {

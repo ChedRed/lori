@@ -17,6 +17,13 @@ Vertex = {}
 --- @field y number
 Point = {}
 
+--- @class Color
+--- @field r number
+--- @field g number
+--- @field b number
+--- @field a number
+Color = {}
+
 --- @class Force
 --- @field x number
 --- @field y number
@@ -151,9 +158,9 @@ Lori = {
         --- @param w number
         --- @param h number
         --- @param r number
-        --- @param anchor "center"|"top-left"|"top-right"|"bottom-left"|"bottom-right"
+        --- @param color number[]
         --- @return nil
-        rect = function(x, y, w, h, r, anchor) end
+        rect = function(x, y, w, h, r, color) end
     },
 
     push = {

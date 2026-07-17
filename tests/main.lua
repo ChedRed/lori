@@ -1,6 +1,6 @@
 function lori.load()
-    lori.set.window.resizable(false)
-    lori.set.window.title("Lori Function Test")
+    -- lori.set.window.resizable(false)
+    -- lori.set.window.title("Lori Function Test")
 end
 
 function lori.keypressed(key)
@@ -19,4 +19,6 @@ function lori.update()
 end
 
 function lori.render()
+    lori.draw.rect(100, 100, 200, 200, 0, {1, 1, 0, 1});
+    lori.draw.rect(400, 500, 300, 250, 0, {0, 1, 1, 1});
 end

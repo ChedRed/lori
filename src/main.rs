@@ -9,7 +9,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
-use crossbeam::channel::{Receiver, Sender, unbounded};
+use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
 
 pub mod utils;
 use utils::{Vertex, Location, MainCommand, ContentCommand};
@@ -18,7 +18,7 @@ pub mod content;
 use content::{Content, object::GPUObject};
 
 use crate::utils::lori::{Lori, keycodes_transformer};
-use crate::utils::{MainLrxCommand, MainLtxCommand, ContentLrxCommand, ContentLtxCommand};
+use crate::utils::{ContentLrxCommand, ContentLtxCommand, GPUPrimitives, MainLrxCommand, MainLtxCommand, Primitive};
 
 
 
@@ -54,14 +54,19 @@ struct State {
     queue: wgpu::Queue,
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
+    primitive_pipeline: wgpu::RenderPipeline,
 
     objects: Vec<GPUObject>,
+    primitives: Vec<Primitive>,
 
     window: Arc<Window>,
     window_scale: [f32; 4],
     gpu_view: GPUView,
     gpu_view_buffer: wgpu::Buffer,
     gpu_view_bind_group: wgpu::BindGroup,
+
+    primitive_buffer: wgpu::Buffer,
+    primitive_bind_group: wgpu::BindGroup,
     
     content_tx: Sender<ContentCommand>,
     main_rx: Receiver<MainCommand>,
@@ -95,7 +100,7 @@ impl State {
         let (content_tx, content_rx) = unbounded::<ContentCommand>();
 
         let (main_ltx, lori_lrx) = unbounded::<MainLtxCommand>();
-        let (lori_ltx, main_lrx) = unbounded::<MainLrxCommand>();
+        let (lori_ltx, main_lrx) = bounded::<MainLrxCommand>(0);
 
         let (content_ltx, c_lori_lrx) = unbounded::<ContentLtxCommand>();
         let (c_lori_ltx, content_lrx) = unbounded::<ContentLrxCommand>();
@@ -131,8 +136,6 @@ impl State {
         let content_handle = Some(std::thread::Builder::new()
             .name("content".to_string())
             .spawn(move || { content.thread_loop(); }).unwrap());
-        
-        let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
         
 
         let mut gpu_view: GPUView = GPUView::new();
@@ -174,21 +177,6 @@ impl State {
                 },
             ],
         });
-        let gpu_view_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Viewport Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-        });
 
         let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("msaa color texture"),
@@ -205,8 +193,10 @@ impl State {
             view_formats: &[],
         });
         
+        
         let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
         
+        let raster_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/main.wgsl").into());
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Layout for Primary Render Pipeline"),
             bind_group_layouts: &[Some(gpu_view_bind_layout).as_ref()],
@@ -252,7 +242,89 @@ impl State {
             },
             multiview_mask: None,
             cache: None,
-        });        
+        });
+
+        let primitives: Vec<Primitive> = Vec::with_capacity(200);
+
+        let primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Primitive Buffer"),
+            size: ((12304)) as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        
+        let primitive_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Primitives Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ]
+        });
+        
+        let primitive_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Primitives Bind Group"),
+            layout: &primitive_bind_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: primitive_buffer.as_entire_binding(),
+            }]
+        });
+        
+        let primitive_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/prim.wgsl").into());
+        let primitive_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Layout for Primary Render Pipeline"),
+            bind_group_layouts: &[Some(primitive_bind_layout).as_ref()],
+            immediate_size: 0,
+        });
+
+        let primitive_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Primary Render Pipeline"),
+            layout: Some(&primitive_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &primitive_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &primitive_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                // cull_mode: Some(wgpu::Face::Front),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
 
         let mut state = State {
             init_time: chrono::Utc::now(),
@@ -264,14 +336,19 @@ impl State {
             queue,
             size,
             render_pipeline,
-            window,
+            primitive_pipeline,
 
             objects,
+            primitives,
 
+            window,
             window_scale,
             gpu_view,
             gpu_view_buffer,
             gpu_view_bind_group,
+
+            primitive_buffer,
+            primitive_bind_group,
             
             content_tx,
             main_rx,
@@ -374,31 +451,6 @@ impl State {
 
         renderpass.set_pipeline(&self.render_pipeline);
         
-        _= self.lori_ltx.send(MainLrxCommand::Render);
-        
-        if let Ok(cmd) = self.lori_lrx.try_recv() {
-            match cmd {
-                MainLtxCommand::SetWindowTitle { text } => {
-                    self.window.set_title(text.as_str());
-                    
-                },
-                MainLtxCommand::SetWindowSize { w, h } => {
-                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
-                    //     self.resize(PhysicalSize { width: w, height: h });
-                    // } // TODO: Wait...
-                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-                },
-                MainLtxCommand::SetWindowResizable { is } => {
-                    _= self.window.set_resizable(is);
-                },
-                MainLtxCommand::GetWindowSize => {
-                    let size: PhysicalSize<u32> = self.window.inner_size();
-                    _= self.lori_ltx.send(MainLrxCommand::GetWindowSize { w: size.width, h: size.height });
-                }
-            }
-        }
-
-        
         _= self.content_tx.send(ContentCommand::Render);
         if let Ok(cmd) = self.main_rx.recv() {
             match cmd {
@@ -414,8 +466,6 @@ impl State {
             }
         }
         
-        renderpass.set_viewport(self.window_scale[0], self.window_scale[1], self.window_scale[2], self.window_scale[3], 0., 1.);
-        
         self.gpu_view.time[0] = chrono::Utc::now().signed_duration_since(self.init_time).as_seconds_f32();
         self.gpu_view.time[1] = chrono::Utc::now().signed_duration_since(self.last_time).as_seconds_f32();
         self.queue.write_buffer(&self.gpu_view_buffer, 0, bytemuck::bytes_of(&[self.gpu_view]));
@@ -428,9 +478,46 @@ impl State {
             renderpass.set_index_buffer(self.objects[i].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             renderpass.draw_indexed(0..self.objects[i].indices.len() as u32, 0, 0..self.objects[i].locations.len() as _);
         }
-        self.last_time = chrono::Utc::now();
+
+        renderpass.set_pipeline(&self.primitive_pipeline);
+        _= self.lori_ltx.send(MainLrxCommand::Render);
+        self.primitives.clear();
         
+        while let Ok(cmd) = self.lori_lrx.try_recv() {
+            match cmd {
+                MainLtxCommand::SetWindowTitle { text } => {
+                    self.window.set_title(text.as_str());
+                },
+                MainLtxCommand::SetWindowSize { w, h } => {
+                    // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
+                    //     self.resize(PhysicalSize { width: w, height: h });
+                    // } // TODO: Wait...
+                    _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
+                },
+                MainLtxCommand::SetWindowResizable { is } => {
+                    _= self.window.set_resizable(is);
+                },
+                MainLtxCommand::GetWindowSize => {
+                    let size: PhysicalSize<u32> = self.window.inner_size();
+                    _= self.lori_ltx.send(MainLrxCommand::GetWindowSize { w: size.width, h: size.height });
+                },
+                MainLtxCommand::DrawRect { x, y, w, h, r, color } => {
+                    self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label: 0, _pad0: 0, _pad1: 0, color });
+                }
+            }
+        }
+
+
+        let mut primitive_box: GPUPrimitives = GPUPrimitives::from_vec(self.primitives.len() as u32, &self.primitives);
+        primitive_box.scale = [self.size.width as f32, self.size.height as f32];
+
+        self.queue.write_buffer(&self.primitive_buffer, 0, &bytemuck::bytes_of(&[primitive_box]));
+        renderpass.set_bind_group(0, &self.primitive_bind_group, &[]);
+        renderpass.draw(0..3, 0..1); // TODO: Only do if any primitive drawing function is called
+        
+        self.last_time = chrono::Utc::now();
         drop(renderpass);
+
         
         self.queue.submit(Some(encoder.finish()));
         self.window.pre_present_notify();

@@ -909,6 +909,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "lori"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "chrono",
+ "crossbeam",
+ "mlua",
+ "pollster",
+ "rapier2d",
+ "serde",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "matrixmultiply"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1748,21 +1763,6 @@ name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
-
-[[package]]
-name = "rust"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "chrono",
- "crossbeam",
- "mlua",
- "pollster",
- "rapier2d",
- "serde",
- "wgpu",
- "winit",
-]
 
 [[package]]
 name = "rustc-hash"
