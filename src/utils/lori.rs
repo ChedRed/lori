@@ -1,12 +1,11 @@
-use crossbeam::{channel::{Receiver, Sender}, select};
+use crossbeam::channel::{Receiver, Sender};
 
-use crate::utils::{ContentLrxCommand, ContentLtxCommand, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
+use crate::utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
 
 pub struct Lori {
     lua: mlua::Lua,
     main_call: Receiver<MainToLoriCall>,
     main_back: Sender<LoriToMainCall>,
-    content_rx: Receiver<ContentLrxCommand>,
 
     lori_load: mlua::Function,
     lori_keypressed: mlua::Function,
@@ -20,7 +19,7 @@ pub struct Lori {
 }
 
 impl Lori {
-    pub fn new(code: String, main_cmd: Sender<LoriToMainCommand>, main_rtrn: Receiver<MainToLoriCommand>, main_call: Receiver<MainToLoriCall>, main_back: Sender<LoriToMainCall>, content_tx: Sender<ContentLtxCommand>, content_rx: Receiver<ContentLrxCommand>) -> Self {
+    pub fn new(code: String, main_cmd: Sender<LoriToMainCommand>, main_rtrn: Receiver<MainToLoriCommand>, main_call: Receiver<MainToLoriCall>, main_back: Sender<LoriToMainCall>) -> Self {
         let lua = mlua::Lua::new();
 
         let tx = main_cmd.clone();
@@ -128,7 +127,6 @@ impl Lori {
             lua,
             main_call,
             main_back,
-            content_rx,
 
             lori_load,
             lori_keypressed,
@@ -143,57 +141,46 @@ impl Lori {
     }
 
     pub fn begin(&mut self) {
-        loop {
-            select! {
-                recv(self.main_call) -> cmd => {
-                    if let Ok(v) = cmd {
-                        match v {
-                            MainToLoriCall::Load => {
-                                _= self.lori_load.call::<()>(());
-                                _= self.main_back.send(LoriToMainCall::Load);
-                            }
-                            MainToLoriCall::Keypressed { code } => {
-                                _= self.lori_keypressed.call::<()>(code);
-                                _= self.main_back.send(LoriToMainCall::Keypressed);
-                            }
-                            MainToLoriCall::Keyreleased { code } => {
-                                _= self.lori_keyreleased.call::<()>(code);
-                                _= self.main_back.send(LoriToMainCall::Keyreleased);
-                            }
-                            MainToLoriCall::Mousepressed { x, y, button } => {
-                                _= self.lori_mousepressed.call::<()>((x, y, button));
-                                _= self.main_back.send(LoriToMainCall::Mousepressed);
-                            }
-                            MainToLoriCall::Mousereleased { x, y, button } => {
-                                _= self.lori_mousereleased.call::<()>((x, y, button));
-                                _= self.main_back.send(LoriToMainCall::Mousereleased);
-                            }
-                            MainToLoriCall::MouseMoved { motion } => {
-                                _= self.lori_mousemoved.call::<()>((motion.0, motion.1));
-                                _= self.main_back.send(LoriToMainCall::MouseMoved);
-                            }
-                            MainToLoriCall::MouseScrolled { motion } => {
-                                _= self.lori_mousescrolled.call::<()>((motion.0, motion.1));
-                                _= self.main_back.send(LoriToMainCall::MouseScrolled);
-                            }
-                            MainToLoriCall::Render => {
-                                _= self.lori_render.call::<()>(());
-                                _= self.main_back.send(LoriToMainCall::Render);
-                            }
-                            MainToLoriCall::Exit => {
-                                break;
-                            }
-                        }
-                    }
-                },
-                recv(self.content_rx) -> cmd => {
-                    if let Ok(v) = cmd {
-                        match v {
-                            ContentLrxCommand::Update => {
-                                _= self.lori_update.call::<()>(());
-                            }
-                        }
-                    }
+        while let Ok(cmd) = self.main_call.recv() {
+            match cmd {
+                MainToLoriCall::Load => {
+                    _= self.lori_load.call::<()>(());
+                    _= self.main_back.send(LoriToMainCall::Load);
+                }
+                MainToLoriCall::Keypressed { code } => {
+                    _= self.lori_keypressed.call::<()>(code);
+                    _= self.main_back.send(LoriToMainCall::Keypressed);
+                }
+                MainToLoriCall::Keyreleased { code } => {
+                    _= self.lori_keyreleased.call::<()>(code);
+                    _= self.main_back.send(LoriToMainCall::Keyreleased);
+                }
+                MainToLoriCall::Mousepressed { x, y, button } => {
+                    _= self.lori_mousepressed.call::<()>((x, y, button));
+                    _= self.main_back.send(LoriToMainCall::Mousepressed);
+                }
+                MainToLoriCall::Mousereleased { x, y, button } => {
+                    _= self.lori_mousereleased.call::<()>((x, y, button));
+                    _= self.main_back.send(LoriToMainCall::Mousereleased);
+                }
+                MainToLoriCall::MouseMoved { motion } => {
+                    _= self.lori_mousemoved.call::<()>((motion.0, motion.1));
+                    _= self.main_back.send(LoriToMainCall::MouseMoved);
+                }
+                MainToLoriCall::MouseScrolled { motion } => {
+                    _= self.lori_mousescrolled.call::<()>((motion.0, motion.1));
+                    _= self.main_back.send(LoriToMainCall::MouseScrolled);
+                }
+                MainToLoriCall::Update { delta } => {
+                    _= self.lori_update.call::<()>(delta);
+                    _= self.main_back.send(LoriToMainCall::Draw);
+                }
+                MainToLoriCall::Render => {
+                    _= self.lori_render.call::<()>(());
+                    _= self.main_back.send(LoriToMainCall::Render);
+                }
+                MainToLoriCall::Exit => {
+                    break;
                 }
             }
         }

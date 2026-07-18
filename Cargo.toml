@@ -8,7 +8,7 @@ bytemuck = { version = "1.25.0", features = ["derive"] }
 chrono = "0.4.45"
 crossbeam = "0.8.4"
 pollster = "0.4.0"
-rapier2d = "0.34.0"
+rapier2d = { version="0.34.0", features = ["parallel"] }
 serde = { version = "1.0.228", features = ["derive"] }
 winit = "0.30.13"
 wgpu = "30.0.0"

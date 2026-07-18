@@ -63,6 +63,9 @@ pub enum MainToLoriCall {
     MouseScrolled {
         motion: (f32, f32),
     },
+    Update {
+        delta: f32,
+    },
     Render,
     Exit
 }
@@ -75,30 +78,10 @@ pub enum LoriToMainCall {
     Mousereleased,
     MouseMoved,
     MouseScrolled,
+    Draw,
     Render,
     GetWindowSize,
     Exit
-}
-
-pub enum ContentLtxCommand {
-}
-
-pub enum ContentLrxCommand {
-    Update,
-}
-
-#[derive(Clone)]
-pub enum ContentCommand {
-    Render,
-    Exit,
-}
-
-#[derive(Clone)]
-pub enum MainCommand {
-    Render {
-        instances: Vec<Vec<Location>>,
-        camera: Displacement,
-    },
 }
 
 pub struct Xy {

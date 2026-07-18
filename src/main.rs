@@ -1,27 +1,20 @@
-use std::{env, fs};
-
-use std::sync::Arc;
-use std::cmp::{max, min};
-use std::thread::JoinHandle;
-use crossbeam::select;
-use winit::application::ApplicationHandler;
+use crossbeam::{channel::{Receiver, Sender, bounded, unbounded}, select};
+use std::{cmp::{max, min}, env, fs, sync::Arc, thread::JoinHandle};
+use rapier2d::prelude::*;
+use winit::{application::ApplicationHandler, event::MouseScrollDelta};
 use winit::dpi::PhysicalSize;
-use winit::event::MouseScrollDelta::{LineDelta, PixelDelta};
-use winit::event::{DeviceEvent, DeviceId, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, MouseButton, MouseScrollDelta::{LineDelta, PixelDelta}, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::SmolStr;
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
-use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
-
-pub mod utils;
-use utils::{Vertex, Location, MainCommand, ContentCommand};
 
 pub mod content;
-use content::{Content, object::GPUObject};
+use content::{object::GPUObject, object::Object};
+pub mod utils;
+use crate::utils::{GPUPrimitives, Location, lori::Lori, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex};
 
-use crate::utils::lori::Lori;
-use crate::utils::{ContentLrxCommand, ContentLtxCommand, GPUPrimitives, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive};
+
 
 
 
@@ -48,7 +41,7 @@ impl GPUView {
 
 
 struct State {
-    init_time: chrono::DateTime<chrono::Utc>,
+    current_time: chrono::DateTime<chrono::Utc>,
     last_time: chrono::DateTime<chrono::Utc>,
     surface: wgpu::Surface<'static>,
     surface_format: wgpu::TextureFormat,
@@ -61,7 +54,8 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     primitive_pipeline: wgpu::RenderPipeline,
 
-    objects: Vec<GPUObject>,
+    gpu_objects: Vec<GPUObject>,
+    objects: Vec<Object>,
     primitives: Vec<Primitive>,
 
     window: Arc<Window>,
@@ -72,15 +66,24 @@ struct State {
 
     primitive_buffer: wgpu::Buffer,
     primitive_bind_group: wgpu::BindGroup,
-    
-    content_tx: Sender<ContentCommand>,
-    main_rx: Receiver<MainCommand>,
+
+    gravity: Vec2, // TODO: allow control from Lua
+    integration_parameters: IntegrationParameters,
+    physics: PhysicsPipeline,
+    island_manager: IslandManager,
+    broad_phase: BroadPhaseBvh,
+    narrow_phase: NarrowPhase,
+    rigidbodies: RigidBodySet,
+    colliders: ColliderSet,
+    impulse_joints: ImpulseJointSet,
+    multibody_joints: MultibodyJointSet,
+    ccd_solver: CCDSolver,
+
     lori_call: Sender<MainToLoriCall>,
     lori_back: Receiver<LoriToMainCall>,
     lori_cmd: Receiver<LoriToMainCommand>,
     lori_rtrn: Sender<MainToLoriCommand>,
     lori_handle: Option<JoinHandle<()>>,
-    content_handle: Option<JoinHandle<()>>,
 }
 
 impl State {
@@ -105,31 +108,20 @@ impl State {
         let cap = surface.get_capabilities(&adapter);
         let surface_format = cap.formats[0];
 
-        let (main_tx, main_rx) = unbounded::<MainCommand>();
-        let (content_tx, content_rx) = unbounded::<ContentCommand>();
-
         let (main_cmd, lori_cmd) = unbounded::<LoriToMainCommand>();
         let (lori_rtrn, main_rtrn) = unbounded::<MainToLoriCommand>();
         let (lori_call, main_call) = bounded::<MainToLoriCall>(0);
         let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
-        let (content_ltx, c_lori_lrx) = unbounded::<ContentLtxCommand>();
-        let (c_lori_ltx, content_lrx) = unbounded::<ContentLrxCommand>();
-        
 
         let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
-        let mut lori: Lori = Lori::new(lua_code, main_cmd, main_rtrn, main_call, main_back, content_ltx, content_lrx);
+        let mut lori: Lori = Lori::new(lua_code, main_cmd, main_rtrn, main_call, main_back);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
         
-        let mut content = Content::create(main_tx, content_rx, c_lori_ltx, c_lori_lrx);
-
-        let mut objects: Vec<GPUObject> = Vec::new();
-        
-        let content_handle = Some(std::thread::Builder::new()
-            .name("content".to_string())
-            .spawn(move || { content.thread_loop(); }).unwrap());
+        let gpu_objects: Vec<GPUObject> = Vec::new();
+        let objects: Vec<Object> = Vec::new();
         
 
         let mut gpu_view: GPUView = GPUView::new();
@@ -320,8 +312,22 @@ impl State {
             cache: None,
         });
 
+        let gravity = Vec2 { x: 0., y: 0. };
+        let mut integration_parameters = IntegrationParameters::default();
+        integration_parameters.dt = 1./60.;
+        
+        let physics = PhysicsPipeline::new();
+        let island_manager = IslandManager::new();
+        let broad_phase = BroadPhaseBvh::new();
+        let narrow_phase = NarrowPhase::new();
+        let rigidbodies = RigidBodySet::new();
+        let colliders = ColliderSet::new();
+        let impulse_joints = ImpulseJointSet::new();
+        let multibody_joints = MultibodyJointSet::new();
+        let ccd_solver = CCDSolver::new();
+
         let mut state = State {
-            init_time: chrono::Utc::now(),
+            current_time: chrono::Utc::now(),
             last_time: chrono::Utc::now(),
             surface,
             surface_format,
@@ -334,6 +340,7 @@ impl State {
             render_pipeline,
             primitive_pipeline,
 
+            gpu_objects,
             objects,
             primitives,
 
@@ -345,15 +352,24 @@ impl State {
 
             primitive_buffer,
             primitive_bind_group,
+
+            gravity,
+            integration_parameters,
+            physics,
+            island_manager,
+            broad_phase,
+            narrow_phase,
+            rigidbodies,
+            colliders,
+            impulse_joints,
+            multibody_joints,
+            ccd_solver,
             
-            content_tx,
-            main_rx,
             lori_call,
             lori_back,
             lori_cmd,
             lori_rtrn,
             lori_handle,
-            content_handle,
         };
 
         _= state.lori_call.send(MainToLoriCall::Load);
@@ -473,6 +489,31 @@ impl State {
     }
 
     fn render(&mut self) {
+        self.current_time = chrono::Utc::now();
+        self.integration_parameters.dt = self.current_time.signed_duration_since(self.last_time).as_seconds_f32();
+        
+        self.physics.step(
+            self.gravity,
+            &self.integration_parameters,
+            &mut self.island_manager,
+            &mut self.broad_phase,
+            &mut self.narrow_phase,
+            &mut self.rigidbodies,
+            &mut self.colliders,
+            &mut self.impulse_joints,
+            &mut self.multibody_joints,
+            &mut self.ccd_solver,
+            &(),
+            &(),
+        );
+
+        _= self.lori_call.send(MainToLoriCall::Update { delta: self.integration_parameters.dt });
+        self.handle_lori_loop();
+
+
+
+
+        
         let surface_texture = self.surface.get_current_texture();
         
         let pretexture_view = match surface_texture {
@@ -505,32 +546,17 @@ impl State {
 
         renderpass.set_pipeline(&self.render_pipeline);
         
-        _= self.content_tx.send(ContentCommand::Render);
-        if let Ok(cmd) = self.main_rx.recv() {
-            match cmd {
-                MainCommand::Render { instances, camera } => {
-                    for i in 0..self.objects.len() {
-                        self.queue.write_buffer(&self.objects[i].location_buffer, 0, bytemuck::cast_slice(&instances[i]));
-                    }
-
-                    self.gpu_view.position[0] = camera.position.x;
-                    self.gpu_view.position[1] = camera.position.y;
-                    self.gpu_view.rotation[0] = camera.rotation;
-                },
-            }
-        }
-        
-        self.gpu_view.time[0] = chrono::Utc::now().signed_duration_since(self.init_time).as_seconds_f32();
+        self.gpu_view.time[0] = chrono::Utc::now().signed_duration_since(self.current_time).as_seconds_f32();
         self.gpu_view.time[1] = chrono::Utc::now().signed_duration_since(self.last_time).as_seconds_f32();
         self.queue.write_buffer(&self.gpu_view_buffer, 0, bytemuck::bytes_of(&[self.gpu_view]));
 
         renderpass.set_bind_group(0, &self.gpu_view_bind_group, &[]);
         
-        for i in 0..self.objects.len() { // Draw each shape
-            renderpass.set_vertex_buffer(0, self.objects[i].vertex_buffer.slice(..));
-            renderpass.set_vertex_buffer(1, self.objects[i].location_buffer.slice(..));
-            renderpass.set_index_buffer(self.objects[i].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            renderpass.draw_indexed(0..self.objects[i].indices.len() as u32, 0, 0..self.objects[i].locations.len() as _);
+        for i in 0..self.gpu_objects.len() { // Draw each shape
+            renderpass.set_vertex_buffer(0, self.gpu_objects[i].vertex_buffer.slice(..));
+            renderpass.set_vertex_buffer(1, self.gpu_objects[i].location_buffer.slice(..));
+            renderpass.set_index_buffer(self.gpu_objects[i].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            renderpass.draw_indexed(0..self.gpu_objects[i].indices.len() as u32, 0, 0..self.gpu_objects[i].locations.len() as _);
         }
 
         
@@ -548,13 +574,14 @@ impl State {
         renderpass.set_bind_group(0, &self.primitive_bind_group, &[]);
         renderpass.draw(0..3, 0..1); // TODO: Only do if any primitive drawing function is called
         
-        self.last_time = chrono::Utc::now();
         drop(renderpass);
 
         
         self.queue.submit(Some(encoder.finish()));
         self.window.pre_present_notify();
         self.queue.present(pretexture_view);
+
+        self.last_time = self.current_time;
     }
 
     fn handle_lori_commands(&mut self, v: LoriToMainCommand) {
@@ -604,12 +631,7 @@ impl State {
 
     fn exit(&mut self) {
         _= self.lori_call.send(MainToLoriCall::Exit);
-        _= self.content_tx.send(ContentCommand::Exit);
         if let Some(join_handle) = self.lori_handle.take() {
-            _= join_handle.join();
-        };
-
-        if let Some(join_handle) = self.content_handle.take() {
             _= join_handle.join();
         };
     }

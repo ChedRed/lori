@@ -33,13 +33,6 @@ function lori.mousescrolled(x, y)
 end
 
 function lori.update()
-    wheel_position[1] = wheel_position[1] + wheel_velocity[1]
-    wheel_position[2] = wheel_position[2] + wheel_velocity[2]
-    wheel_velocity[1] = wheel_velocity[1] * 0.9
-    wheel_velocity[2] = wheel_velocity[2] * 0.9
-end
-
-function lori.render()
     if lori.get.key.state("w") then
         wheel_velocity[2] = wheel_velocity[2] - 1
     end
@@ -52,7 +45,13 @@ function lori.render()
     if lori.get.key.state("d") then
         wheel_velocity[1] = wheel_velocity[1] + 1
     end
+    wheel_position[1] = wheel_position[1] + wheel_velocity[1]
+    wheel_position[2] = wheel_position[2] + wheel_velocity[2]
+    wheel_velocity[1] = wheel_velocity[1] * 0.9
+    wheel_velocity[2] = wheel_velocity[2] * 0.9
+end
 
+function lori.render()
     local x, y = lori.get.window.size()
     lori.draw.rect(mouse_position[1] - 100, mouse_position[2] - 100, 200, 200, 0, {0, 1, 1, 1});
     lori.draw.circle(wheel_position[1], wheel_position[2], 200, {0.5, 0.75, 0, 1});

@@ -73,4 +73,5 @@ TODO:
 - Enforce at least one physics tick before rendering, unless lori.update is not present
 - Add the rest of the functions ([=] and [-] means fully implemented, but [-] is untested/able)
 - Allow lori functions to be optional (eg. lori.load, lori.update, etc)
+- Switch to single-threaded, with rapier2d physics thread-fanning
 ```
