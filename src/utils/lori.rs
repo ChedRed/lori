@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
@@ -7,15 +9,15 @@ pub struct Lori {
     main_call: Receiver<MainToLoriCall>,
     main_back: Sender<LoriToMainCall>,
 
-    lori_load: mlua::Function,
-    lori_keypressed: mlua::Function,
-    lori_keyreleased: mlua::Function,
-    lori_mousepressed: mlua::Function,
-    lori_mousereleased: mlua::Function,
-    lori_mousemoved: mlua::Function,
-    lori_mousescrolled: mlua::Function,
-    lori_update: mlua::Function,
-    lori_render: mlua::Function,
+    lori_load: Option<mlua::Function>,
+    lori_keypressed: Option<mlua::Function>,
+    lori_keyreleased: Option<mlua::Function>,
+    lori_mousepressed: Option<mlua::Function>,
+    lori_mousereleased: Option<mlua::Function>,
+    lori_mousemoved: Option<mlua::Function>,
+    lori_mousescrolled: Option<mlua::Function>,
+    lori_update: Option<mlua::Function>,
+    lori_render: Option<mlua::Function>,
 }
 
 impl Lori {
@@ -110,18 +112,100 @@ impl Lori {
         _= lori.set("get", get);
         _= lori.set("draw", draw);
         _= lua.globals().set("lori", lori.clone());
-        lua.load(code).exec().unwrap();
+        match lua.load(code).exec() {
+            Ok(status) => {
+                
+            }
+            Err(e)=> {
+                eprintln!("lori (EROR): {}", e);
+                exit(3);
+            }
+        }
         let lhk: mlua::Table = lua.globals().get("lori").unwrap();
 
-        let lori_load: mlua::Function = lhk.get("load").unwrap();
-        let lori_keypressed: mlua::Function = lhk.get("keypressed").unwrap();
-        let lori_keyreleased: mlua::Function = lhk.get("keyreleased").unwrap();
-        let lori_mousepressed: mlua::Function = lhk.get("mousepressed").unwrap();
-        let lori_mousereleased: mlua::Function = lhk.get("mousereleased").unwrap();
-        let lori_mousemoved: mlua::Function = lhk.get("mousemoved").unwrap();
-        let lori_mousescrolled: mlua::Function = lhk.get("mousescrolled").unwrap();
-        let lori_update: mlua::Function = lhk.get("update").unwrap();
-        let lori_render: mlua::Function = lhk.get("render").unwrap();
+        let mut lori_load: Option<mlua::Function> = None;
+        let mut lori_keypressed: Option<mlua::Function> = None; 
+        let mut lori_keyreleased: Option<mlua::Function> = None; 
+        let mut lori_mousepressed: Option<mlua::Function> = None; 
+        let mut lori_mousereleased: Option<mlua::Function> = None; 
+        let mut lori_mousemoved: Option<mlua::Function> = None; 
+        let mut lori_mousescrolled: Option<mlua::Function> = None; 
+        let mut lori_update: Option<mlua::Function> = None; 
+        let mut lori_render: Option<mlua::Function> = None; 
+        
+        match lhk.get("load") {
+            Ok(func) => {
+                lori_load = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("keypressed") {
+            Ok(func) => {
+                lori_keypressed = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("keyreleased") {
+            Ok(func) => {
+                lori_keyreleased = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("mousepressed") {
+            Ok(func) => {
+                lori_mousepressed = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("mousereleased") {
+            Ok(func) => {
+                lori_mousereleased = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("mousemoved") {
+            Ok(func) => {
+                lori_mousemoved = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("mousescrolled") {
+            Ok(func) => {
+                lori_mousescrolled = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("update") {
+            Ok(func) => {
+                lori_update = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+        match lhk.get("render") {
+            Ok(func) => {
+                lori_render = func;
+            }
+            Err(e) => {
+                eprintln!("lori (WARN): {}", e);
+            }
+        }
+
         
         Self {
             lua,
@@ -144,40 +228,85 @@ impl Lori {
         while let Ok(cmd) = self.main_call.recv() {
             match cmd {
                 MainToLoriCall::Load => {
-                    _= self.lori_load.call::<()>(());
-                    _= self.main_back.send(LoriToMainCall::Load);
+                    match &self.lori_load {
+                        Some(func) => {
+                        _= func.call::<()>(());
+                        _= self.main_back.send(LoriToMainCall::Load);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Keypressed { code } => {
-                    _= self.lori_keypressed.call::<()>(code);
-                    _= self.main_back.send(LoriToMainCall::Keypressed);
+                    match &self.lori_keypressed {
+                        Some(func) => {
+                        _= func.call::<()>(code);
+                        _= self.main_back.send(LoriToMainCall::Keypressed);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Keyreleased { code } => {
-                    _= self.lori_keyreleased.call::<()>(code);
-                    _= self.main_back.send(LoriToMainCall::Keyreleased);
+                    match &self.lori_keyreleased {
+                        Some(func) => {
+                        _= func.call::<()>(code);
+                        _= self.main_back.send(LoriToMainCall::Keyreleased);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Mousepressed { x, y, button } => {
-                    _= self.lori_mousepressed.call::<()>((x, y, button));
-                    _= self.main_back.send(LoriToMainCall::Mousepressed);
+                    match &self.lori_mousepressed {
+                        Some(func) => {
+                        _= func.call::<()>((x, y, button));
+                        _= self.main_back.send(LoriToMainCall::Mousepressed);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Mousereleased { x, y, button } => {
-                    _= self.lori_mousereleased.call::<()>((x, y, button));
-                    _= self.main_back.send(LoriToMainCall::Mousereleased);
+                    match &self.lori_mousereleased {
+                        Some(func) => {
+                        _= func.call::<()>((x, y, button));
+                        _= self.main_back.send(LoriToMainCall::Mousereleased);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::MouseMoved { motion } => {
-                    _= self.lori_mousemoved.call::<()>((motion.0, motion.1));
-                    _= self.main_back.send(LoriToMainCall::MouseMoved);
+                    match &self.lori_mousemoved {
+                        Some(func) => {
+                        _= func.call::<()>((motion.0, motion.1));
+                        _= self.main_back.send(LoriToMainCall::MouseMoved);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::MouseScrolled { motion } => {
-                    _= self.lori_mousescrolled.call::<()>((motion.0, motion.1));
-                    _= self.main_back.send(LoriToMainCall::MouseScrolled);
+                    match &self.lori_mousescrolled {
+                        Some(func) => {
+                        _= func.call::<()>((motion.0, motion.1));
+                        _= self.main_back.send(LoriToMainCall::MouseScrolled);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Update { delta } => {
-                    _= self.lori_update.call::<()>(delta);
-                    _= self.main_back.send(LoriToMainCall::Draw);
+                    match &self.lori_update {
+                        Some(func) => {
+                        _= func.call::<()>(delta);
+                        _= self.main_back.send(LoriToMainCall::Draw);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Render => {
-                    _= self.lori_render.call::<()>(());
-                    _= self.main_back.send(LoriToMainCall::Render);
+                    match &self.lori_render {
+                        Some(func) => {
+                        _= func.call::<()>(());
+                        _= self.main_back.send(LoriToMainCall::Render);
+                        }
+                        _ => {}
+                    }
                 }
                 MainToLoriCall::Exit => {
                     break;

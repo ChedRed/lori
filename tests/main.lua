@@ -32,18 +32,18 @@ function lori.mousescrolled(x, y)
     print("MOUSE SCROLLED", x, y)
 end
 
-function lori.update()
+function lori.update(delta)
     if lori.get.key.state("w") then
-        wheel_velocity[2] = wheel_velocity[2] - 1
+        wheel_velocity[2] = wheel_velocity[2] - delta * 100
     end
     if lori.get.key.state("s") then
-        wheel_velocity[2] = wheel_velocity[2] + 1
+        wheel_velocity[2] = wheel_velocity[2] + delta * 100
     end
     if lori.get.key.state("a") then
-        wheel_velocity[1] = wheel_velocity[1] - 1
+        wheel_velocity[1] = wheel_velocity[1] - delta * 100
     end
     if lori.get.key.state("d") then
-        wheel_velocity[1] = wheel_velocity[1] + 1
+        wheel_velocity[1] = wheel_velocity[1] + delta * 100
     end
     wheel_position[1] = wheel_position[1] + wheel_velocity[1]
     wheel_position[2] = wheel_position[2] + wheel_velocity[2]

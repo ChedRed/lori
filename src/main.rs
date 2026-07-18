@@ -1,5 +1,5 @@
 use crossbeam::{channel::{Receiver, Sender, bounded, unbounded}, select};
-use std::{cmp::{max, min}, env, fs, sync::Arc, thread::JoinHandle};
+use std::{cmp::{max, min}, env, fs, process::exit, sync::Arc, thread::JoinHandle};
 use rapier2d::prelude::*;
 use winit::{application::ApplicationHandler, event::MouseScrollDelta};
 use winit::dpi::PhysicalSize;
@@ -88,9 +88,25 @@ struct State {
 
 impl State {
     async fn new(window: Arc<Window>) -> State {
+        let args: Vec<String> = env::args().collect();
+        if args.len() != 2 {
+            eprintln!("lori: 'lori <path to .lua>'");
+            exit(1);
+        }
+
+        let lua_code: String;
+        match fs::read_to_string(args[1].clone()) {
+            Ok(file) => {
+                lua_code = file;
+            }
+            Err(e) => {
+                eprintln!("lori (EROR): {}", e); // EROR, INFO, DBUG, VBOS
+                exit(e.raw_os_error().unwrap_or_default());
+            }
+        }
+        
         let mouse: (f32, f32) = (0., 0.);
         let keys: Vec<String> = Vec::new();
-        let args: Vec<String> = env::args().collect();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -114,7 +130,6 @@ impl State {
         let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
 
-        let lua_code: String = fs::read_to_string(args[1].clone()).unwrap();
         let mut lori: Lori = Lori::new(lua_code, main_cmd, main_rtrn, main_call, main_back);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())

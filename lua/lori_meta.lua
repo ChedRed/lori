@@ -88,8 +88,9 @@ Lori = {
     --- @param y number
     --- @return nil
     mousescrolled = function(x, y) end,
+    --- @param delta number
     --- @return nil
-    update = function() end,
+    update = function(delta) end,
     --- @return nil
     render = function() end,
 
