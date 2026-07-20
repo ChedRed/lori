@@ -38,8 +38,8 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [] lori.draw.shape(shape: lori.Shape) -> nil
 [] lori.draw.border(border: lori.Border) -> nil
 [] lori.draw.line(x1: float, y1: float, x2: float, y2: float, color: number[]) -> nil
-[] lori.draw.circle(x: float, y: float, radius: float, color: number[]) -> nil
-[] lori.draw.rect(x: float, y: float, w: float, h: float, r: float, color: number[]) -> nil
+[=] lori.draw.circle(x: float, y: float, radius: float, color: number[]) -> nil
+[=] lori.draw.rect(x: float, y: float, w: float, h: float, r: float, color: number[]) -> nil
 
 [] lori.Object.push(force: lori.Force) -> nil
 

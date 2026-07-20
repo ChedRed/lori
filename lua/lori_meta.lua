@@ -174,9 +174,10 @@ Lori = {
         --- @param y1 number
         --- @param x2 number
         --- @param y2 number
+        --- @param radius number
         --- @param color number[]
         --- @return nil
-        line = function(x1, y1, x2, y2, color) end,
+        line = function(x1, y1, x2, y2, radius, color) end,
         --- @param x number
         --- @param y number
         --- @param radius number

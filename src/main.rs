@@ -1,3 +1,4 @@
+use clap::Parser;
 use crossbeam::{channel::{Receiver, Sender, bounded, unbounded}, select};
 use std::{cmp::{max, min}, env, fs, process::exit, sync::Arc, thread::JoinHandle};
 use rapier2d::prelude::*;
@@ -15,7 +16,26 @@ pub mod utils;
 use crate::utils::{GPUPrimitives, Location, lori::Lori, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex};
 
 
+#[derive(Parser, Debug)]
+#[command(name = "lori")]
+#[command(
+    about="A rust-based framework for Lua games!",
+    long_about="A rust-based framework that allows you to create any game in Lua with the lori API!")]
+struct Args {
+    #[arg(short, long,
+        help="Enable test mode",
+        long_help="Enables testing for github actions.\nWhen enabled, exits at the end of lori.render() and requires all lori functions to be present in lua code\n")]
+    test: bool,
+    
+    #[arg(short, long, help="Enable verbose output")]
+    verbose: bool,
 
+    #[arg(long)]
+    devbug: bool,
+    
+    filepath: String,
+
+}
 
 
 #[repr(C)]
@@ -41,6 +61,8 @@ impl GPUView {
 
 
 struct State {
+    argus: Args,
+    
     current_time: chrono::DateTime<chrono::Utc>,
     last_time: chrono::DateTime<chrono::Utc>,
     surface: wgpu::Surface<'static>,
@@ -88,14 +110,10 @@ struct State {
 
 impl State {
     async fn new(window: Arc<Window>) -> State {
-        let args: Vec<String> = env::args().collect();
-        if args.len() != 2 {
-            eprintln!("lori: 'lori <path to .lua>'");
-            exit(1);
-        }
+        let argus: Args = Args::parse();
 
         let lua_code: String;
-        match fs::read_to_string(args[1].clone()) {
+        match fs::read_to_string(&argus.filepath) {
             Ok(file) => {
                 lua_code = file;
             }
@@ -130,7 +148,7 @@ impl State {
         let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
 
-        let mut lori: Lori = Lori::new(lua_code, main_cmd, main_rtrn, main_call, main_back);
+        let mut lori: Lori = Lori::new(lua_code, argus.verbose, main_cmd, main_rtrn, main_call, main_back);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
@@ -342,6 +360,8 @@ impl State {
         let ccd_solver = CCDSolver::new();
 
         let mut state = State {
+            argus,
+
             current_time: chrono::Utc::now(),
             last_time: chrono::Utc::now(),
             surface,
@@ -505,8 +525,11 @@ impl State {
 
     fn render(&mut self) {
         self.current_time = chrono::Utc::now();
-        self.integration_parameters.dt = self.current_time.signed_duration_since(self.last_time).as_seconds_f32();
         
+        _= self.lori_call.send(MainToLoriCall::Update { delta: self.integration_parameters.dt });
+        self.handle_lori_loop();
+        
+        self.integration_parameters.dt = self.current_time.signed_duration_since(self.last_time).as_seconds_f32();
         self.physics.step(
             self.gravity,
             &self.integration_parameters,
@@ -521,12 +544,6 @@ impl State {
             &(),
             &(),
         );
-
-
-        _= self.lori_call.send(MainToLoriCall::Update { delta: self.integration_parameters.dt });
-        self.handle_lori_loop();
-    
-
 
         
         let surface_texture = self.surface.get_current_texture();
@@ -637,7 +654,6 @@ impl State {
                     while let Ok(cmd) = self.lori_cmd.try_recv() {
                         self.handle_lori_commands(cmd);
                     }
-                    
                     break;
                 }
             }
@@ -671,13 +687,18 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                println!("Close requested! Exiting application...");
+                println!("lori (INFO): Closing application by request...");
                 superstate.exit();
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
                 superstate.render();
                 superstate.get_window().request_redraw();
+                if superstate.argus.test {
+                    println!("lori (INFO): Closing application after successful test...");
+                    superstate.exit();
+                    event_loop.exit();
+                }
             }
             WindowEvent::Resized(size) => {
                 superstate.resize(size);
@@ -716,7 +737,7 @@ fn main() {
 
     let mut app = App::default();
     match events.run_app(&mut app) {
-        Ok(()) => println!("Exited successfully."),
-        Err(error) => eprintln!("Exited with an error:\n {error:?}"),
+        Ok(()) => println!("lori (INFO): Exited successfully."),
+        Err(error) => eprintln!("lori (EROR): Exited with an error:\n {error:?}"),
     }
 }

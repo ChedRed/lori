@@ -1,6 +1,7 @@
 use std::process::exit;
 
 use crossbeam::channel::{Receiver, Sender};
+use mlua::Function;
 
 use crate::utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
 
@@ -21,7 +22,7 @@ pub struct Lori {
 }
 
 impl Lori {
-    pub fn new(code: String, main_cmd: Sender<LoriToMainCommand>, main_rtrn: Receiver<MainToLoriCommand>, main_call: Receiver<MainToLoriCall>, main_back: Sender<LoriToMainCall>) -> Self {
+    pub fn new(code: String, verbose: bool, main_cmd: Sender<LoriToMainCommand>, main_rtrn: Receiver<MainToLoriCommand>, main_call: Receiver<MainToLoriCall>, main_back: Sender<LoriToMainCall>) -> Self {
         let lua = mlua::Lua::new();
 
         let tx = main_cmd.clone();
@@ -32,6 +33,7 @@ impl Lori {
         let tx6 = tx.clone();
         let tx7 = tx.clone();
         let tx8 = tx.clone();
+        let tx9 = tx.clone();
         
         let rx = main_rtrn.clone();
         let rx2 = rx.clone();
@@ -101,6 +103,10 @@ impl Lori {
             _= tx7.send(LoriToMainCommand::DrawPrimitive { x, y, w: 0., h: 0., r, color, label: 1 });
             Ok(())
         }).unwrap());
+        _= draw.set("line", lua.create_function(move |_, (x1, y1, x2, y2, r, color)| {
+            _= tx9.send(LoriToMainCommand::DrawPrimitive { x: x1, y: y1, w: x2, h: y2, r, color, label: 2 });
+            Ok(())
+        }).unwrap());
         let push = lua.create_table().unwrap();
         let delete = lua.create_table().unwrap();
 
@@ -113,8 +119,10 @@ impl Lori {
         _= lori.set("draw", draw);
         _= lua.globals().set("lori", lori.clone());
         match lua.load(code).exec() {
-            Ok(status) => {
-                
+            Ok(()) => {
+                if verbose {
+                    println!("lori (VBOS): Successfully loaded code");
+                }
             }
             Err(e)=> {
                 eprintln!("lori (EROR): {}", e);
@@ -136,63 +144,81 @@ impl Lori {
         match lhk.get("load") {
             Ok(func) => {
                 lori_load = func;
-                println!("lori (INFO): Loaded function 'Load'");
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'Load'");
+                }
             }
             _ => {}
         }
-        match lhk.get("keypressed") {
+        match lhk.get::<Function>("keypressed") {
             Ok(func) => {
-                lori_keypressed = func;
-                println!("lori (INFO): Loaded function 'KeyPressed'");
+                lori_keypressed = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'KeyPressed'");
+                }
             }
             _ => {}
         }
-        match lhk.get("keyreleased") {
+        match lhk.get::<Function>("keyreleased") {
             Ok(func) => {
-                lori_keyreleased = func;
-                println!("lori (INFO): Loaded function 'KeyReleased'");
+                lori_keyreleased = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'KeyReleased'");
+                }
             }
             _ => {}
         }
-        match lhk.get("mousepressed") {
+        match lhk.get::<Function>("mousepressed") {
             Ok(func) => {
-                lori_mousepressed = func;
-                println!("lori (INFO): Loaded function 'MousePressed'");
+                lori_mousepressed = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'MousePressed'");
+                }
             }
             _ => {}
         }
-        match lhk.get("mousereleased") {
+        match lhk.get::<Function>("mousereleased") {
             Ok(func) => {
-                lori_mousereleased = func;
-                println!("lori (INFO): Loaded function 'MouseReleased'");
+                lori_mousereleased = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'MouseReleased'");
+                }
             }
             _ => {}
         }
-        match lhk.get("mousemoved") {
+        match lhk.get::<Function>("mousemoved") {
             Ok(func) => {
-                lori_mousemoved = func;
-                println!("lori (INFO): Loaded function 'MouseMoved'");
+                lori_mousemoved = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'MouseMoved'");
+                }
             }
             _ => {}
         }
-        match lhk.get("mousescrolled") {
+        match lhk.get::<Function>("mousescrolled") {
             Ok(func) => {
-                lori_mousescrolled = func;
-                println!("lori (INFO): Loaded function 'MouseScrolled'");
+                lori_mousescrolled = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'MouseScrolled'");
+                }
             }
             _ => {}
         }
-        match lhk.get("update") {
+        match lhk.get::<Function>("update") {
             Ok(func) => {
-                lori_update = func;
-                println!("lori (INFO): Loaded function 'Update'");
+                lori_update = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'Update'");
+                }
             }
             _ => {}
         }
-        match lhk.get("render") {
+        match lhk.get::<Function>("render") {
             Ok(func) => {
-                lori_render = func;
-                println!("lori (INFO): Loaded function 'Render'");
+                lori_render = Some(func);
+                if verbose {
+                    println!("lori (VBOS): Loaded function 'Render'");
+                }
             }
             _ => {}
         }

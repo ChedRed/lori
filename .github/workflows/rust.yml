@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         args:
-        - "./tests/main.lua"
+        - "-t ./tests/main.lua"
 
     steps:
     - name: Checkout

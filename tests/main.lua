@@ -16,5 +16,6 @@ function lori.update(delta)
 end
 
 function lori.render()
-    lori.draw.circle(wheel_position[1], wheel_position[2], 200, {0.5, 0.75, 0, 1})
+    lori.draw.circle(wheel_position[1], wheel_position[2], 200, { 0.5, 0.75, 0, 1 })
+    lori.draw.line(100, 100, 200, 300, 10, { 0, 0.5, 1, 1 })
 end

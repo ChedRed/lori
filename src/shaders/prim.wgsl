@@ -20,7 +20,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VSOut {
 }
 
 struct Primitive {
-    xywh: vec4<f32>,
+    xyzw: vec4<f32>,
     r: f32,
     label: u32,
     _pad0: u32,
@@ -47,20 +47,25 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
         
         let primitive = primitives.data[i];
         if (primitive.label == 0) {
-            if (primitive.xywh.x < coords.x) {
-                if (primitive.xywh.x + primitive.xywh.w > coords.x) {
-                    if (primitive.xywh.y < coords.y) {
-                        if (primitive.xywh.y + primitive.xywh.w > coords.y) {
+            if (primitive.xyzw.x < coords.x) {
+                if (primitive.xyzw.x + primitive.xyzw.z > coords.x) {
+                    if (primitive.xyzw.y < coords.y) {
+                        if (primitive.xyzw.y + primitive.xyzw.w > coords.y) {
                             color = primitive.color;
-                            break;
                         }
                     }
                 }
             }
         } else if (primitive.label == 1) {
-            let mult = clamp(primitive.r-distance(coords, vec2<f32>(primitive.xywh.x, primitive.xywh.y)), 0.0, 1.0);
+            let mult: f32 = clamp(primitive.r-distance(coords, primitive.xyzw.xy), 0.0, 1.0);
             color = color + (primitive.color - color)*mult;
-            break;
+        } else if (primitive.label == 2) {
+            let ab: vec2<f32> = primitive.xyzw.zw-primitive.xyzw.xy;
+            let ap: vec2<f32> = coords-primitive.xyzw.xy;
+            let ln_pos: f32  = clamp(dot(ap, ab) / dot(ab, ab), 0, 1);
+            let closest_point: vec2<f32> = primitive.xyzw.xy + ab*ln_pos;
+            let mult: f32 = clamp(primitive.r-distance(coords, closest_point), 0.0, 1.0);
+            color = color + (primitive.color - color)*mult;
         }
     }
 
