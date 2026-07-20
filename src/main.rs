@@ -522,10 +522,10 @@ impl State {
             &(),
         );
 
+
         _= self.lori_call.send(MainToLoriCall::Update { delta: self.integration_parameters.dt });
         self.handle_lori_loop();
-
-
+    
 
 
         

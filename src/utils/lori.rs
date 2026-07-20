@@ -136,74 +136,65 @@ impl Lori {
         match lhk.get("load") {
             Ok(func) => {
                 lori_load = func;
+                println!("lori (INFO): Loaded function 'Load'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("keypressed") {
             Ok(func) => {
                 lori_keypressed = func;
+                println!("lori (INFO): Loaded function 'KeyPressed'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("keyreleased") {
             Ok(func) => {
                 lori_keyreleased = func;
+                println!("lori (INFO): Loaded function 'KeyReleased'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("mousepressed") {
             Ok(func) => {
                 lori_mousepressed = func;
+                println!("lori (INFO): Loaded function 'MousePressed'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("mousereleased") {
             Ok(func) => {
                 lori_mousereleased = func;
+                println!("lori (INFO): Loaded function 'MouseReleased'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("mousemoved") {
             Ok(func) => {
                 lori_mousemoved = func;
+                println!("lori (INFO): Loaded function 'MouseMoved'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("mousescrolled") {
             Ok(func) => {
                 lori_mousescrolled = func;
+                println!("lori (INFO): Loaded function 'MouseScrolled'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("update") {
             Ok(func) => {
                 lori_update = func;
+                println!("lori (INFO): Loaded function 'Update'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
         match lhk.get("render") {
             Ok(func) => {
                 lori_render = func;
+                println!("lori (INFO): Loaded function 'Render'");
             }
-            Err(e) => {
-                eprintln!("lori (WARN): {}", e);
-            }
+            _ => {}
         }
 
         
@@ -230,83 +221,83 @@ impl Lori {
                 MainToLoriCall::Load => {
                     match &self.lori_load {
                         Some(func) => {
-                        _= func.call::<()>(());
-                        _= self.main_back.send(LoriToMainCall::Load);
+                            _= func.call::<()>(());
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Load);
                 }
                 MainToLoriCall::Keypressed { code } => {
                     match &self.lori_keypressed {
                         Some(func) => {
-                        _= func.call::<()>(code);
-                        _= self.main_back.send(LoriToMainCall::Keypressed);
+                            _= func.call::<()>(code);
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Keypressed);
                 }
                 MainToLoriCall::Keyreleased { code } => {
                     match &self.lori_keyreleased {
                         Some(func) => {
-                        _= func.call::<()>(code);
-                        _= self.main_back.send(LoriToMainCall::Keyreleased);
+                            _= func.call::<()>(code);
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Keyreleased);
                 }
                 MainToLoriCall::Mousepressed { x, y, button } => {
                     match &self.lori_mousepressed {
                         Some(func) => {
-                        _= func.call::<()>((x, y, button));
-                        _= self.main_back.send(LoriToMainCall::Mousepressed);
+                            _= func.call::<()>((x, y, button));
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Mousepressed);
                 }
                 MainToLoriCall::Mousereleased { x, y, button } => {
                     match &self.lori_mousereleased {
                         Some(func) => {
-                        _= func.call::<()>((x, y, button));
-                        _= self.main_back.send(LoriToMainCall::Mousereleased);
+                            _= func.call::<()>((x, y, button));
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Mousereleased);
                 }
                 MainToLoriCall::MouseMoved { motion } => {
                     match &self.lori_mousemoved {
                         Some(func) => {
-                        _= func.call::<()>((motion.0, motion.1));
-                        _= self.main_back.send(LoriToMainCall::MouseMoved);
+                            _= func.call::<()>((motion.0, motion.1));
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::MouseMoved);
                 }
                 MainToLoriCall::MouseScrolled { motion } => {
                     match &self.lori_mousescrolled {
                         Some(func) => {
-                        _= func.call::<()>((motion.0, motion.1));
-                        _= self.main_back.send(LoriToMainCall::MouseScrolled);
+                            _= func.call::<()>((motion.0, motion.1));
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::MouseScrolled);
                 }
                 MainToLoriCall::Update { delta } => {
                     match &self.lori_update {
                         Some(func) => {
-                        _= func.call::<()>(delta);
-                        _= self.main_back.send(LoriToMainCall::Draw);
+                            _= func.call::<()>(delta);
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Draw);
                 }
                 MainToLoriCall::Render => {
                     match &self.lori_render {
                         Some(func) => {
-                        _= func.call::<()>(());
-                        _= self.main_back.send(LoriToMainCall::Render);
+                            _= func.call::<()>(());
                         }
                         _ => {}
                     }
+                    _= self.main_back.send(LoriToMainCall::Render);
                 }
                 MainToLoriCall::Exit => {
                     break;
