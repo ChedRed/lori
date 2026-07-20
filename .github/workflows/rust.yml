@@ -23,6 +23,10 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Install system deps
+      run: |
+        sudo apt-get install -y xvfb
       
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -32,5 +36,5 @@ jobs:
 
     - name: Test Lori
       run: |
-        set -e
-          ./target/release/lori ${{ matrix.args }}
+        xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
+        ./target/release/lori ${{ matrix.args }}
