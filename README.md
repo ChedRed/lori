@@ -13,30 +13,26 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [-] lori.set.window.size(w: int, h: int) -> nil
 [=] lori.set.window.resizable(is: bool) -> nil
 
-
 [=] lori.get.window.size() -> table[w: int, h: int]
-
 [ ] lori.get.key.state(key: string) -> bool
 [ ] lori.get.mouse.position() -> table[x: number, y: number]
 
 [ ] lori.new.shape(type: string("rectangle"|"triangle"), x: number, y: number, w: number, h: number) -> lori.Shape
-[ ] lori.new.mesh(vertices: Vertex[ ], indices: int[ ]|nil) -> lori.Shape
+[ ] lori.new.mesh(vertices: Vertex[], indices: int[] | nil) -> lori.Shape
 [ ] lori.new.image(image: string) -> lori.Shape
-
+[ ] lori.new.border(points: Point[]) -> lori.Border
 [ ] lori.new.collider(shape: lori.Shape, collision: string("static"|"diaxial"|"dynamic")) -> lori.Collider
-
 [ ] lori.new.object(x: number, y: number, r: number, shape: lori.Shape, collider: lori.Collider | nil) -> lori.Object
-[ ] lori.new.border(points: Point[ ]) -> lori.Border
-
 [ ] lori.new.force(x: number, y: number, fx: number, fy: number) -> lori.Force
-
 [ ] lori.new.sound(sound: String) -> lori.Sound
+[ ] lori.new.font(font: String) -> lori.Font
 
 [ ] lori.draw.shape(shape: lori.Shape) -> nil
 [ ] lori.draw.border(border: lori.Border) -> nil
-[ ] lori.draw.line(x1: number, y1: number, x2: number, y2: number, color: number[ ]) -> nil
-[=] lori.draw.circle(x: number, y: number, radius: number, color: number[ ]) -> nil
-[=] lori.draw.rect(x: number, y: number, w: number, h: number, r: number, color: number[ ]) -> nil
+[=] lori.draw.line(x1: number, y1: number, x2: number, y2: number, color: number[]) -> nil
+[=] lori.draw.circle(x: number, y: number, radius: number, color: number[]) -> nil
+[=] lori.draw.rect(x: number, y: number, w: number, h: number, r: number, color: number[]) -> nil
+[ ] lori.draw.text(text: String, font: lori.Font | nil) -> nil
 
 [ ] lori.Sound.play(volume: number, pitch: number) -> nil
 [ ] lori.Sound.loop(count: number) -> nil
@@ -44,12 +40,9 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 
 [ ] lori.Object.set.position(x: number, y: number) -> nil
 [ ] lori.Object.set.angle(r: number) -> nil
-
 [ ] lori.Object.get.position() -> table[x: number, y: number]
 [ ] lori.Object.get.angle() -> number
-
 [ ] lori.Object.push(force: lori.Force) -> nil
-
 [ ] lori.Object.delete() -> nil
 ```
 
@@ -66,9 +59,11 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 ```
 
 ```
+[ ] Font
 [ ] Force
 [ ] Point
 [ ] Shape
+[ ] Sound
 [ ] Border
 [ ] Object
 [ ] Vertex

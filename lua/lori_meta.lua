@@ -79,6 +79,9 @@ Sound = {
     stop = function() end,
 }
 
+--- @class Font
+Font = {}
+
 --- @class Lori
 Lori = {
     --- @return nil
@@ -183,6 +186,9 @@ Lori = {
         --- @param sound string
         --- @return Sound
         sound = function(sound) return Sound end,
+        --- @param font string
+        --- @return Font
+        font = function(font) return Font end,
     },
 
     draw = {
@@ -213,7 +219,10 @@ Lori = {
         --- @param r number
         --- @param color number[]
         --- @return nil
-        rect = function(x, y, w, h, r, color) end
+        rect = function(x, y, w, h, r, color) end,
+        --- @param text string
+        --- @param font Font | nil
+        text = function(text, font) end,
     }
 }
 

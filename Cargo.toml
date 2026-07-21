@@ -7,9 +7,8 @@ edition = "2024"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 chrono = "0.4.45"
 clap = { version = "4.6.2", features = ["derive"] }
-crossbeam = "0.8.4"
-mlua = { git = "https://github.com/mlua-rs/mlua", branch = "main", features = ["lua52", "send", "vendored"] }
-# mlua = { version = "0.12.0", features = ["lua52", "send", "vendored"] }
+crossbeam = "0.8.4"]
+mlua = { version = "0.12.0", features = ["luajit52", "send"] }
 pollster = "1.0.1"
 rapier2d = { version="0.34.0", features = ["parallel"] }
 serde = { version = "1.0.228", features = ["derive"] }
