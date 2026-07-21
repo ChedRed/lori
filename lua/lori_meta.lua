@@ -57,7 +57,26 @@ Object = {
         position = function() return 0, 0 end,
         --- @return number
         angle = function() return 0 end,
-    }
+    },
+    --- @param force Force
+    --- @return nil
+    push = function(force) end,
+    --- @return nil
+    delete = function() end,
+}
+
+--- @class Sound
+Sound = {
+    --- @param volume number
+    --- @param pitch number
+    --- @return nil
+    play = function(volume, pitch) end,
+    --- @param count number
+    --- @param volume number
+    --- @param pitch number
+    loop = function(count, volume, pitch) end,
+    --- @return nil
+    stop = function() end,
 }
 
 --- @class Lori
@@ -161,6 +180,9 @@ Lori = {
         --- @param fy number
         --- @return Force
         force = function(x, y, fx, fy) return Force end,
+        --- @param sound string
+        --- @return Sound
+        sound = function(sound) return Sound end,
     },
 
     draw = {
@@ -192,19 +214,6 @@ Lori = {
         --- @param color number[]
         --- @return nil
         rect = function(x, y, w, h, r, color) end
-    },
-
-    push = {
-        --- @param object Object
-        --- @param force Force
-        --- @return nil
-        object = function(object, force) end
-    },
-
-    delete = {
-        --- @param object Object
-        --- @return nil
-        object = function(object) end
     }
 }
 
