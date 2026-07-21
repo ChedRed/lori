@@ -26,7 +26,7 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 
 [] lori.new.shape(type: string("rectangle"|"triangle"), x: float, y: float, w: float, h: float) -> lori.Shape
 [] lori.new.mesh(vertices: Vertex[], indices: int[]|nil) -> lori.Shape
-[] lori.new.image(img: string) -> lori.Shape
+[] lori.new.image(image: string) -> lori.Shape
 
 [] lori.new.collider(shape: lori.Shape, collision: string("static"|"diaxial"|"dynamic")) -> lori.Collider
 
@@ -35,11 +35,15 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 
 [] lori.new.force(x: float, y: float, fx: float, fy: float) -> lori.Force
 
+lori.new.sound(sound: String) -> lori.Sound
+
 [] lori.draw.shape(shape: lori.Shape) -> nil
 [] lori.draw.border(border: lori.Border) -> nil
 [] lori.draw.line(x1: float, y1: float, x2: float, y2: float, color: number[]) -> nil
 [=] lori.draw.circle(x: float, y: float, radius: float, color: number[]) -> nil
 [=] lori.draw.rect(x: float, y: float, w: float, h: float, r: float, color: number[]) -> nil
+
+lori.play.sound(sound: lori.Sound) -> nil
 
 [] lori.Object.push(force: lori.Force) -> nil
 

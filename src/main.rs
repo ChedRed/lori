@@ -1,6 +1,6 @@
 use clap::Parser;
 use crossbeam::{channel::{Receiver, Sender, bounded, unbounded}, select};
-use std::{cmp::{max, min}, env, fs, process::exit, sync::Arc, thread::JoinHandle};
+use std::{cmp::{max, min}, fs, process::exit, sync::Arc, thread::JoinHandle};
 use rapier2d::prelude::*;
 use winit::{application::ApplicationHandler, event::MouseScrollDelta};
 use winit::dpi::PhysicalSize;
@@ -24,7 +24,7 @@ use crate::utils::{GPUPrimitives, Location, lori::Lori, LoriToMainCall, LoriToMa
 struct Args {
     #[arg(short, long,
         help="Enable test mode",
-        long_help="Enables testing for github actions.\nWhen enabled, exits at the end of lori.render() and requires all lori functions to be present in lua code\n")]
+        long_help="Enables testing for github actions.\nWhen enabled, exits at the end of lori.render() and will require all lori functions to be present in lua code.")]
     test: bool,
     
     #[arg(short, long, help="Enable verbose output")]
