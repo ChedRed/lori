@@ -1,9 +1,9 @@
 use std::process::exit;
 
 use crossbeam::channel::{Receiver, Sender};
-use mlua::Function;
+use mlua::{Function};
 
-use crate::utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand};
+use crate::{content::shape::LoriShape, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{erorln, errorln, serorln, vbosln}}};
 
 pub struct Lori {
     lua: mlua::Lua,
@@ -34,10 +34,12 @@ impl Lori {
         let tx7 = tx.clone();
         let tx8 = tx.clone();
         let tx9 = tx.clone();
+        let tx10 = tx.clone();
         
         let rx = main_rtrn.clone();
         let rx2 = rx.clone();
         let rx3 = rx.clone();
+        let rx4 = rx.clone();
         let lori = lua.create_table().unwrap();
         
         let set = lua.create_table().unwrap();
@@ -66,7 +68,7 @@ impl Lori {
             _= tx5.try_send(LoriToMainCommand::GetWindowSize);
             while let Ok(cmd) = rx2.recv() {
                 match cmd {
-                    MainToLoriCommand::ReturnWindowSize { w, h } => {
+                    MainToLoriCommand::ReturnGetWindowSize { w, h } => {
                         nw = w;
                         nh = h;
                         break;
@@ -94,6 +96,21 @@ impl Lori {
         }).unwrap());
         
         let new = lua.create_table().unwrap();
+        _= new.set("shape", lua.create_function(move |_, (kind, w, h)| {
+            _= tx10.send(LoriToMainCommand::NewShape { kind, w, h });
+            let mut new_shape: Option<LoriShape> = None;
+            while let Ok(cmd) = rx4.recv() {
+                match cmd {
+                    MainToLoriCommand::ReturnNewShape { shape } => {
+                        new_shape = Some(shape);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            
+            Ok(new_shape)
+        }).unwrap());
         let draw = lua.create_table().unwrap();
         _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {
             _= tx6.send(LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label: 0 });
@@ -117,15 +134,16 @@ impl Lori {
         _= lori.set("set", set);
         _= lori.set("get", get);
         _= lori.set("draw", draw);
+        _= lori.set("new", new);
         _= lua.globals().set("lori", lori.clone());
         match lua.load(code).exec() {
             Ok(()) => {
                 if verbose {
-                    println!("lori (VBOS): Successfully loaded code");
+                    vbosln("Successfully loaded code");
                 }
             }
             Err(e)=> {
-                eprintln!("lori (EROR): {}", e);
+                serorln(e.to_string());
                 exit(3);
             }
         }
@@ -145,7 +163,7 @@ impl Lori {
             Ok(func) => {
                 lori_load = func;
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'Load'");
+                    vbosln("Loaded function 'Load'");
                 }
             }
             _ => {}
@@ -154,7 +172,7 @@ impl Lori {
             Ok(func) => {
                 lori_keypressed = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'KeyPressed'");
+                    vbosln("Loaded function 'KeyPressed'");
                 }
             }
             _ => {}
@@ -163,7 +181,7 @@ impl Lori {
             Ok(func) => {
                 lori_keyreleased = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'KeyReleased'");
+                    vbosln("Loaded function 'KeyReleased'");
                 }
             }
             _ => {}
@@ -172,7 +190,7 @@ impl Lori {
             Ok(func) => {
                 lori_mousepressed = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'MousePressed'");
+                    vbosln("Loaded function 'MousePressed'");
                 }
             }
             _ => {}
@@ -181,7 +199,7 @@ impl Lori {
             Ok(func) => {
                 lori_mousereleased = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'MouseReleased'");
+                    vbosln("Loaded function 'MouseReleased'");
                 }
             }
             _ => {}
@@ -190,7 +208,7 @@ impl Lori {
             Ok(func) => {
                 lori_mousemoved = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'MouseMoved'");
+                    vbosln("Loaded function 'MouseMoved'");
                 }
             }
             _ => {}
@@ -199,7 +217,7 @@ impl Lori {
             Ok(func) => {
                 lori_mousescrolled = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'MouseScrolled'");
+                    vbosln("Loaded function 'MouseScrolled'");
                 }
             }
             _ => {}
@@ -208,7 +226,7 @@ impl Lori {
             Ok(func) => {
                 lori_update = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'Update'");
+                    vbosln("Loaded function 'Update'");
                 }
             }
             _ => {}
@@ -217,7 +235,7 @@ impl Lori {
             Ok(func) => {
                 lori_render = Some(func);
                 if verbose {
-                    println!("lori (VBOS): Loaded function 'Render'");
+                    vbosln("Loaded function 'Render'");
                 }
             }
             _ => {}

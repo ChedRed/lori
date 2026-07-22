@@ -14,10 +14,10 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [=] lori.set.window.resizable(is: bool) -> nil
 
 [=] lori.get.window.size() -> table[w: int, h: int]
-[ ] lori.get.key.state(key: string) -> bool
-[ ] lori.get.mouse.position() -> table[x: number, y: number]
+[=] lori.get.key.state(key: string) -> bool
+[=] lori.get.mouse.position() -> table[x: number, y: number]
 
-[ ] lori.new.shape(type: string("rectangle"|"triangle"), x: number, y: number, w: number, h: number) -> lori.Shape
+[ ] lori.new.shape(type: string("rectangle"|"triangle"), w: number, h: number) -> lori.Shape
 [ ] lori.new.mesh(vertices: Vertex[], indices: int[] | nil) -> lori.Shape
 [ ] lori.new.image(image: string) -> lori.Shape
 [ ] lori.new.border(points: Point[]) -> lori.Border
@@ -27,7 +27,7 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [ ] lori.new.sound(sound: String) -> lori.Sound
 [ ] lori.new.font(font: String) -> lori.Font
 
-[ ] lori.draw.shape(shape: lori.Shape) -> nil
+[ ] lori.draw.shape(x: number, y: number, shape: lori.Shape) -> nil
 [ ] lori.draw.border(border: lori.Border) -> nil
 [=] lori.draw.line(x1: number, y1: number, x2: number, y2: number, color: number[]) -> nil
 [=] lori.draw.circle(x: number, y: number, radius: number, color: number[]) -> nil
@@ -74,6 +74,4 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 TODO:
 - Enforce at least one physics tick before rendering, unless lori.update is not present
 - Add the rest of the functions ([=] and [-] means fully implemented, but [-] is untested/able)
-- Allow lori functions to be optional (eg. lori.load, lori.update, etc)
-- Switch to single-threaded, with rapier2d physics thread-fanning
 ```

@@ -1,89 +1,104 @@
 -- lori_meta.lua
 -- DO NOT require this at runtime. Only for LuaLS / IDE.
 
---- @class Vertex
---- @field x number
---- @field y number
---- @field u number
---- @field v number
---- @field r number
---- @field g number
---- @field b number
---- @field a number
-Vertex = {}
-
---- @class Point
---- @field x number
---- @field y number
-Point = {}
-
---- @class Color
---- @field r number
---- @field g number
---- @field b number
---- @field a number
-Color = {}
-
---- @class Force
---- @field x number
---- @field y number
---- @field fx number
---- @field fy number
-Force = {}
-
---- @class Shape
-Shape = {}
-
---- @class Collider
-Collider = {}
-
---- @class Border
-Border = {}
-
---- @class Object
-Object = {
-    set = {
-        --- @param x number
-        --- @param y number
-        --- @return nil
-        position = function(x, y) end,
-        --- @param r number
-        --- @return nil
-        angle = function(r) end,
-    },
-    get = {
-        --- @return number
-        --- @return number
-        position = function() return 0, 0 end,
-        --- @return number
-        angle = function() return 0 end,
-    },
-    --- @param force Force
-    --- @return nil
-    push = function(force) end,
-    --- @return nil
-    delete = function() end,
-}
-
---- @class Sound
-Sound = {
-    --- @param volume number
-    --- @param pitch number
-    --- @return nil
-    play = function(volume, pitch) end,
-    --- @param count number
-    --- @param volume number
-    --- @param pitch number
-    loop = function(count, volume, pitch) end,
-    --- @return nil
-    stop = function() end,
-}
-
---- @class Font
-Font = {}
-
 --- @class Lori
 Lori = {
+    --- @class Vertex
+    --- @field x number
+    --- @field y number
+    --- @field u number
+    --- @field v number
+    --- @field r number
+    --- @field g number
+    --- @field b number
+    --- @field a number
+    Vertex = {},
+
+    --- @class Point
+    --- @field x number
+    --- @field y number
+    Point = {},
+
+    --- @class Color
+    --- @field r number
+    --- @field g number
+    --- @field b number
+    --- @field a number
+    Color = {},
+
+    --- @class Force
+    --- @field x number
+    --- @field y number
+    --- @field fx number
+    --- @field fy number
+    Force = {},
+
+    --- @class Shape
+    Shape = {
+        --- @param self Shape
+        --- @param text string
+        --- @return nil
+        test = function(self, text) end,
+    },
+
+    --- @class Collider
+    Collider = {},
+
+    --- @class Border
+    Border = {},
+
+    --- @class Object
+    Object = {
+        set = {
+            --- @param self Object
+            --- @param x number
+            --- @param y number
+            --- @return nil
+            position = function(self, x, y) end,
+            --- @param self Object
+            --- @param r number
+            --- @return nil
+            angle = function(self, r) end,
+        },
+        get = {
+            --- @param self Object
+            --- @return number
+            --- @return number
+            position = function(self) return 0, 0 end,
+            --- @param self Object
+            --- @return number
+            angle = function(self) return 0 end,
+        },
+        --- @param self Object
+        --- @param force Force
+        --- @return nil
+        push = function(self, force) end,
+        --- @param self Object
+        --- @return nil
+        delete = function(self) end,
+    },
+
+    --- @class Sound
+    Sound = {
+        --- @param self Sound
+        --- @param volume number
+        --- @param pitch number
+        --- @return nil
+        play = function(self, volume, pitch) end,
+        --- @param self Sound
+        --- @param count number
+        --- @param volume number
+        --- @param pitch number
+        loop = function(self, count, volume, pitch) end,
+        --- @param self Sound
+        --- @return nil
+        stop = function(self) end,
+    },
+
+    --- @class Font
+    Font = {},
+
+
     --- @return nil
     load = function() end,
     --- @param key string
@@ -150,51 +165,51 @@ Lori = {
 
     new = {
         --- @param type "rectangle"|"triangle"
-        --- @param x number
-        --- @param y number
         --- @param w number
         --- @param h number
         --- @return Shape
-        shape = function(type, x, y, w, h) return Shape end,
+        shape = function(type, w, h) return Lori.Shape end,
         --- @param vertices Vertex[]
         --- @param indices integer[] | nil
         --- @return Shape
-        mesh = function(vertices, indices) return Shape end,
+        mesh = function(vertices, indices) return Lori.Shape end,
         --- @param img string
         --- @return Shape
-        image = function(img) return Shape end,
+        image = function(img) return Lori.Shape end,
         --- @param shape Shape
         --- @param collision "static"|"diaxial"|"dynamic"
         --- @return Collider
-        collider = function(shape, collision) return Collider end,
+        collider = function(shape, collision) return Lori.Collider end,
         --- @param x number
         --- @param y number
         --- @param r number
         --- @param shape Shape
         --- @param collider Collider | nil
         --- @return Object
-        object = function(x, y, r, shape, collider) return Object end,
+        object = function(x, y, r, shape, collider) return Lori.Object end,
         --- @param points Point[]
         --- @return Border
-        border = function(points) return Border end,
+        border = function(points) return Lori.Border end,
         --- @param x number
         --- @param y number
         --- @param fx number
         --- @param fy number
         --- @return Force
-        force = function(x, y, fx, fy) return Force end,
+        force = function(x, y, fx, fy) return Lori.Force end,
         --- @param sound string
         --- @return Sound
-        sound = function(sound) return Sound end,
+        sound = function(sound) return Lori.Sound end,
         --- @param font string
         --- @return Font
-        font = function(font) return Font end,
+        font = function(font) return Lori.Font end,
     },
 
     draw = {
+        --- @param x number
+        --- @param y number
         --- @param shape Shape
         --- @return nil
-        shape = function(shape) end,
+        shape = function(x, y, shape) end,
         --- @param border Border
         --- @return nil
         border = function(border) end,

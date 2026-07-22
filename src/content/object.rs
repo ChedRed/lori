@@ -26,9 +26,9 @@ impl GPUObject {
             usage: wgpu::BufferUsages::VERTEX,
         });
         
-        let location_buffer = device.create_buffer(&wgpu::BufferDescriptor { // TODO: Remember to EXPAND for more objects!!!! Use for loop to dynamically make larger pls :)
+        let location_buffer = device.create_buffer(&wgpu::BufferDescriptor { // TODO: Replace 200 with a reasonable number
             label: Some("Location Buffer"),
-            size: (size_of::<Location>() * 200) as u64, // Max 200 instances per car
+            size: (size_of::<Location>() * 200) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -44,7 +44,7 @@ impl GPUObject {
     }
 
     pub fn spawn(&mut self, x: f32, y: f32, rotation: f32) {
-        self.locations.push(Location {position: [x, y], rotation: [rotation, 0.]})
+        self.locations.push(Location {position: [x, y], rotation: [rotation, 0.]});
     }
 }
 

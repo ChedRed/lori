@@ -8,12 +8,12 @@ use winit::event::{DeviceEvent, DeviceId, MouseButton, MouseScrollDelta::{LineDe
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::SmolStr;
 use winit::window::{Window, WindowId};
-use wgpu::util::DeviceExt;
+use wgpu::{naga::FastHashMap, util::DeviceExt};
 
 pub mod content;
-use content::{object::GPUObject, object::Object};
+use content::{shape::Shape, object::GPUObject, object::Object};
 pub mod utils;
-use crate::utils::{GPUPrimitives, Location, lori::Lori, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex};
+use crate::{content::shape::LoriShape, utils::{GPUPrimitives, Location, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex, lori::Lori, print::{erorln, errorln, infoln, sdbugln}}};
 
 
 #[derive(Parser, Debug)]
@@ -76,8 +76,10 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     primitive_pipeline: wgpu::RenderPipeline,
 
-    gpu_objects: Vec<GPUObject>,
+    shapes: FastHashMap<u64, Shape>,
+    shape_id: u64,
     objects: Vec<Object>,
+    gpu_objects: Vec<GPUObject>,
     primitives: Vec<Primitive>,
 
     window: Arc<Window>,
@@ -104,6 +106,7 @@ struct State {
     lori_call: Sender<MainToLoriCall>,
     lori_back: Receiver<LoriToMainCall>,
     lori_cmd: Receiver<LoriToMainCommand>,
+    lori_cmd_rev: Sender<LoriToMainCommand>,
     lori_rtrn: Sender<MainToLoriCommand>,
     lori_handle: Option<JoinHandle<()>>,
 }
@@ -111,6 +114,12 @@ struct State {
 impl State {
     async fn new(window: Arc<Window>) -> State {
         let argus: Args = Args::parse();
+        if argus.verbose {
+            infoln("Verbose mode activated");
+        }
+        if argus.devbug {
+            infoln("Debug mode activated");
+        }
 
         let lua_code: String;
         match fs::read_to_string(&argus.filepath) {
@@ -118,7 +127,7 @@ impl State {
                 lua_code = file;
             }
             Err(e) => {
-                eprintln!("lori (EROR): {}", e); // EROR, INFO, DBUG, VBOS
+                errorln(&e);
                 exit(e.raw_os_error().unwrap_or_default());
             }
         }
@@ -147,15 +156,17 @@ impl State {
         let (lori_call, main_call) = bounded::<MainToLoriCall>(0);
         let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
+        let lori_cmd_rev = main_cmd.clone();
 
         let mut lori: Lori = Lori::new(lua_code, argus.verbose, main_cmd, main_rtrn, main_call, main_back);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
         
-        let gpu_objects: Vec<GPUObject> = Vec::new();
+        let shapes: FastHashMap<u64, Shape> = FastHashMap::default();
+        let shape_id: u64 = 0;
         let objects: Vec<Object> = Vec::new();
-        
+        let gpu_objects: Vec<GPUObject> = Vec::new();
 
         let mut gpu_view: GPUView = GPUView::new();
         let min: f32 = min(size.width, size.height) as f32;
@@ -375,8 +386,10 @@ impl State {
             render_pipeline,
             primitive_pipeline,
 
-            gpu_objects,
+            shapes,
+            shape_id,
             objects,
+            gpu_objects,
             primitives,
 
             window,
@@ -403,6 +416,7 @@ impl State {
             lori_call,
             lori_back,
             lori_cmd,
+            lori_cmd_rev,
             lori_rtrn,
             lori_handle,
         };
@@ -631,14 +645,37 @@ impl State {
                 _= self.window.set_resizable(is);
             },
             LoriToMainCommand::GetWindowSize => {
-                _= self.lori_rtrn.send(MainToLoriCommand::ReturnWindowSize { w: self.size.width, h: self.size.height });
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnGetWindowSize { w: self.size.width, h: self.size.height });
             },
             LoriToMainCommand::GetKeyPressed { key } => {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnKeyPressed { key: self.keys.contains(&key) });
             },
+            LoriToMainCommand::NewShape { kind, w, h } => {
+                let mut vertices: Vec<Vertex> = Vec::new();
+                let mut indices: Vec<u32> = Vec::new();
+                if kind == "rectangle" {
+                    vertices.push(Vertex { position: [0., 0.], uv: [0., 0.], color: [1., 1., 1., 1.] });
+                    vertices.push(Vertex { position: [w, 0.], uv: [1., 0.], color: [1., 1., 1., 1.] });
+                    vertices.push(Vertex { position: [0., h], uv: [0., 1.], color: [1., 1., 1., 1.] });
+                    vertices.push(Vertex { position: [w, h], uv: [1., 1.], color: [1., 1., 1., 1.] });
+
+                    indices.push(0);
+                    indices.push(1);
+                    indices.push(2);
+                    indices.push(3);
+                }
+                self.shapes.insert(self.shape_id, Shape::new(vertices, indices));
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewShape { shape: LoriShape { uid: self.shape_id, tx: self.lori_cmd_rev.clone() } });
+                self.shape_id += 1;
+            },
             LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label } => {
                 self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label, _pad0: 0, _pad1: 0, color });
-            }
+            },
+            LoriToMainCommand::SHapeTest { uid, text } => {
+                if self.argus.devbug {
+                    sdbugln(format!("Shape {} prints '{}'", uid, text));
+                }
+            },
         }
     }
     
@@ -687,7 +724,7 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                println!("lori (INFO): Closing application by request...");
+                infoln("Closing application by request...");
                 superstate.exit();
                 event_loop.exit();
             }
@@ -695,7 +732,7 @@ impl ApplicationHandler for App {
                 superstate.render();
                 superstate.get_window().request_redraw();
                 if superstate.argus.test {
-                    println!("lori (INFO): Closing application after successful test...");
+                    infoln("Closing application after successful test...");
                     superstate.exit();
                     event_loop.exit();
                 }
@@ -737,7 +774,7 @@ fn main() {
 
     let mut app = App::default();
     match events.run_app(&mut app) {
-        Ok(()) => println!("lori (INFO): Exited successfully."),
-        Err(error) => eprintln!("lori (EROR): Exited with an error:\n {error:?}"),
+        Ok(()) => infoln("Exited successfully."),
+        Err(error) => erorln("Exited with an error:\n {error:?}"),
     }
 }

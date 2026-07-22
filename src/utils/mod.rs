@@ -1,7 +1,10 @@
 pub mod transform;
 pub mod lori;
+pub mod print;
 
 use transform::Vector2;
+
+use crate::content::shape::LoriShape;
 
 pub enum LoriToMainCommand {
     SetWindowTitle {
@@ -18,6 +21,11 @@ pub enum LoriToMainCommand {
     GetKeyPressed {
         key: String,
     },
+    NewShape {
+        kind: String,
+        w: f32,
+        h: f32,
+    },
     DrawPrimitive {
         x: f32,
         y: f32,
@@ -27,16 +35,23 @@ pub enum LoriToMainCommand {
         color: [f32; 4],
         label: u32,
     },
+    SHapeTest {
+        uid: u64,
+        text: String,
+    }
 }
 
 pub enum MainToLoriCommand {
-    ReturnWindowSize {
+    ReturnGetWindowSize {
         w: u32,
         h: u32,
     },
     ReturnKeyPressed {
         key: bool,
-    },    
+    },
+    ReturnNewShape {
+        shape: LoriShape,
+    }
 }
 
 pub enum MainToLoriCall {
