@@ -81,6 +81,7 @@ struct State {
     objects: Vec<Object>,
     gpu_objects: Vec<GPUObject>,
     primitives: Vec<Primitive>,
+    renderqueue: Vec<u64>,
 
     window: Arc<Window>,
     window_scale: [f32; 4],
@@ -165,6 +166,7 @@ impl State {
         
         let shapes: FastHashMap<u64, Shape> = FastHashMap::default();
         let shape_id: u64 = 0;
+        let renderqueue: Vec<u64> = Vec::new();
         let objects: Vec<Object> = Vec::new();
         let gpu_objects: Vec<GPUObject> = Vec::new();
 
@@ -388,6 +390,7 @@ impl State {
 
             shapes,
             shape_id,
+            renderqueue,
             objects,
             gpu_objects,
             primitives,
@@ -671,7 +674,7 @@ impl State {
             LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label } => {
                 self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label, _pad0: 0, _pad1: 0, color });
             },
-            LoriToMainCommand::SHapeTest { uid, text } => {
+            LoriToMainCommand::ShapeTest { uid, text } => {
                 if self.argus.devbug {
                     sdbugln(format!("Shape {} prints '{}'", uid, text));
                 }

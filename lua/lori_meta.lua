@@ -47,6 +47,19 @@ Lori = {
     --- @class Border
     Border = {},
 
+    --- @class Thing
+    Thing = {
+        --- @param self Thing
+        --- @param x number
+        --- @param y number
+        --- @param r number
+        --- @return Object
+        spawn = function(self, x, y, r) return Lori.Object end,
+        --- @param self Thing
+        --- @return nil
+        erradicate = function(self) end,
+    },
+
     --- @class Object
     Object = {
         set = {
@@ -176,20 +189,17 @@ Lori = {
         --- @param img string
         --- @return Shape
         image = function(img) return Lori.Shape end,
+        --- @param points Point[]
+        --- @return Border
+        border = function(points) return Lori.Border end,
         --- @param shape Shape
         --- @param collision "static"|"diaxial"|"dynamic"
         --- @return Collider
         collider = function(shape, collision) return Lori.Collider end,
-        --- @param x number
-        --- @param y number
-        --- @param r number
-        --- @param shape Shape
+        --- @param shape Shape | nil
         --- @param collider Collider | nil
-        --- @return Object
-        object = function(x, y, r, shape, collider) return Lori.Object end,
-        --- @param points Point[]
-        --- @return Border
-        border = function(points) return Lori.Border end,
+        --- @return Thing
+        thing = function(shape, collider) return Lori.Thing end,
         --- @param x number
         --- @param y number
         --- @param fx number
@@ -205,14 +215,6 @@ Lori = {
     },
 
     draw = {
-        --- @param x number
-        --- @param y number
-        --- @param shape Shape
-        --- @return nil
-        shape = function(x, y, shape) end,
-        --- @param border Border
-        --- @return nil
-        border = function(border) end,
         --- @param x1 number
         --- @param y1 number
         --- @param x2 number
@@ -235,9 +237,11 @@ Lori = {
         --- @param color number[]
         --- @return nil
         rect = function(x, y, w, h, r, color) end,
+        --- @param x number
+        --- @param y number
         --- @param text string
         --- @param font Font | nil
-        text = function(text, font) end,
+        text = function(x, y, text, font) end,
     }
 }
 

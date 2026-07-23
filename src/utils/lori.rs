@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use crossbeam::channel::{Receiver, Sender};
-use mlua::{Function};
+use mlua::{Function, UserDataRef};
 
 use crate::{content::shape::LoriShape, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{erorln, errorln, serorln, vbosln}}};
 
@@ -35,6 +35,7 @@ impl Lori {
         let tx8 = tx.clone();
         let tx9 = tx.clone();
         let tx10 = tx.clone();
+        let tx11 = tx.clone();
         
         let rx = main_rtrn.clone();
         let rx2 = rx.clone();

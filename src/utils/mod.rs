@@ -35,7 +35,7 @@ pub enum LoriToMainCommand {
         color: [f32; 4],
         label: u32,
     },
-    SHapeTest {
+    ShapeTest {
         uid: u64,
         text: String,
     }

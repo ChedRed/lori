@@ -12,7 +12,7 @@ pub struct LoriShape {
 impl UserData for LoriShape {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("test", |_, this, text| {
-            _= this.tx.send(LoriToMainCommand::SHapeTest { uid: this.uid, text });
+            _= this.tx.send(LoriToMainCommand::ShapeTest { uid: this.uid, text });
             Ok(())
         });
     }
