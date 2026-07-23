@@ -12,6 +12,7 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [=] lori.set.window.title(text: string) -> nil
 [-] lori.set.window.size(w: int, h: int) -> nil
 [=] lori.set.window.resizable(is: bool) -> nil
+[ ] lori.set.gravity(x: number, y: number) -> nil
 
 [=] lori.get.window.size() -> table[w: int, h: int]
 [=] lori.get.key.state(key: string) -> bool
@@ -22,8 +23,7 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [ ] lori.new.image(image: string) -> lori.Shape
 [ ] lori.new.border(points: Point[]) -> lori.Border
 [ ] lori.new.collider(shape: lori.Shape, collision: string("static"|"diaxial"|"dynamic")) -> lori.Collider
-[ ] lori.new.thing(shape: lori.Shape | nil, collider: lori.Collider | nil) -> lori.Thing
-[ ] lori.new.force(x: number, y: number, fx: number, fy: number) -> lori.Force
+[ ] lori.new.thing(shape: lori.Shape | nil, collider: lori.Collider | nil) -> lori.Thing // Spawner???
 [ ] lori.new.sound(sound: String) -> lori.Sound
 [ ] lori.new.font(font: String) -> lori.Font
 
@@ -43,7 +43,8 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [ ] lori.Object.set.angle(r: number) -> nil
 [ ] lori.Object.get.position() -> table[x: number, y: number]
 [ ] lori.Object.get.angle() -> number
-[ ] lori.Object.push(force: lori.Force) -> nil
+[ ] lori.Object.push(x: number, y: number) -> nil
+[ ] lori.Object.pull(x1: number, y1: number, x2: number, y2: number) -> nil
 [ ] lori.Object.delete() -> nil
 ```
 
@@ -57,11 +58,11 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [=] lori.mousescrolled(x, y) -> nil
 [=] lori.update() -> nil
 [=] lori.render() -> nil
+lori.exit() -> nil
 ```
 
 ```
 [ ] Font
-[ ] Force
 [ ] Point
 [ ] Shape
 [ ] Sound

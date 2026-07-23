@@ -1,5 +1,6 @@
 -- lori_meta.lua
 -- DO NOT require this at runtime. Only for LuaLS / IDE.
+--- @meta
 
 --- @class Lori
 Lori = {
@@ -25,13 +26,6 @@ Lori = {
     --- @field b number
     --- @field a number
     Color = {},
-
-    --- @class Force
-    --- @field x number
-    --- @field y number
-    --- @field fx number
-    --- @field fy number
-    Force = {},
 
     --- @class Shape
     Shape = {
@@ -83,9 +77,17 @@ Lori = {
             angle = function(self) return 0 end,
         },
         --- @param self Object
-        --- @param force Force
+        --- @param x number
+        --- @param y number
         --- @return nil
-        push = function(self, force) end,
+        push = function(self, x, y) end,
+        --- @param self Object
+        --- @param x1 number
+        --- @param y1 number
+        --- @param x2 number
+        --- @param y2 number
+        --- @return nil
+        pull = function(self, x1, y1, x2, y2) end,
         --- @param self Object
         --- @return nil
         delete = function(self) end,
@@ -143,9 +145,12 @@ Lori = {
     update = function(delta) end,
     --- @return nil
     render = function() end,
-
+    --- @return nil
+    exit = function() end,
+    
     set = {
         window = {
+            --- Thingaling!
             --- @param text string
             --- @return nil
             title = function(text) end,
@@ -156,7 +161,11 @@ Lori = {
             --- @param is boolean
             --- @return nil
             resizable = function(is) end,
-        }
+        },
+        --- @param x number
+        --- @param y number
+        --- @return nil
+        gravity = function(x, y) end,
     },
 
     get = {
@@ -200,12 +209,6 @@ Lori = {
         --- @param collider Collider | nil
         --- @return Thing
         thing = function(shape, collider) return Lori.Thing end,
-        --- @param x number
-        --- @param y number
-        --- @param fx number
-        --- @param fy number
-        --- @return Force
-        force = function(x, y, fx, fy) return Lori.Force end,
         --- @param sound string
         --- @return Sound
         sound = function(sound) return Lori.Sound end,

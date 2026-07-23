@@ -1,31 +1,24 @@
-local wheel_position = { 0, 0 }
-
 function lori.load()
+    lori.set.window.title("Lori Test Application")
     Shape = lori.new.shape("rectangle", 100, 150)
-    Shape:test("Tested!")
 
     Collider = lori.new.collider(Shape, "dynamic")
-    Thing = lori.new.thing(Shape, Collider);
+    Thing = lori.new.thing(Shape, Collider)
 
-    Object = Thing.spawn(100, 200, 0)
+    Object = Thing:spawn(100, 200, 0)
 end
 
 function lori.update(delta)
     if lori.get.key.state("w") then
-        wheel_position[2] = wheel_position[2] - delta * 1000
+        Object:push(0, -delta * 1000)
     end
     if lori.get.key.state("s") then
-        wheel_position[2] = wheel_position[2] + delta * 1000
+        Object:push(0, delta * 1000)
     end
     if lori.get.key.state("a") then
-        wheel_position[1] = wheel_position[1] - delta * 1000
+        Object:push(-delta * 1000, 0)
     end
     if lori.get.key.state("d") then
-        wheel_position[1] = wheel_position[1] + delta * 1000
+        Object:push(delta * 1000, 0)
     end
-end
-
-function lori.render()
-    lori.draw.circle(wheel_position[1], wheel_position[2], 200, { 0.5, 0.75, 0, 1 })
-    lori.draw.line(100, 100, 200, 300, 10, { 0, 0.5, 1, 1 })
 end
