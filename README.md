@@ -58,7 +58,7 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [=] lori.mousescrolled(x, y) -> nil
 [=] lori.update() -> nil
 [=] lori.render() -> nil
-lori.exit() -> nil
+[-] lori.exit() -> nil
 ```
 
 ```
@@ -77,4 +77,5 @@ lori.exit() -> nil
 TODO:
 - Enforce at least one physics tick before rendering, unless lori.update is not present
 - Add the rest of the functions ([=] and [-] means fully implemented, but [-] is untested/able)
+- Add safeguard to prevent pushing static objects, or objects without colliders
 ```

@@ -4,7 +4,7 @@ pub mod print;
 
 use transform::Vector2;
 
-use crate::content::shape::LoriShape;
+use crate::content::{collider::LoriColliderRef, shape::LoriShapeRef, thing::{LoriObjectRef, LoriThingRef}};
 
 pub enum LoriToMainCommand {
     SetWindowTitle {
@@ -26,6 +26,14 @@ pub enum LoriToMainCommand {
         w: f32,
         h: f32,
     },
+    NewCollider {
+        shape: LoriShapeRef,
+        collision: String,
+    },
+    NewThing {
+        shape: Option<LoriShapeRef>,
+        collider: Option<LoriColliderRef>,
+    },
     DrawPrimitive {
         x: f32,
         y: f32,
@@ -35,9 +43,25 @@ pub enum LoriToMainCommand {
         color: [f32; 4],
         label: u32,
     },
-    ShapeTest {
+    ThingSpawn {
         uid: u64,
-        text: String,
+        x: f32,
+        y: f32,
+        r: f32,
+    },
+    ObjectPush {
+        puid: u64,
+        uid: u64,
+        x: f32,
+        y: f32,
+    },
+    ObjectPull {
+        puid: u64,
+        uid: u64,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
     }
 }
 
@@ -50,8 +74,17 @@ pub enum MainToLoriCommand {
         key: bool,
     },
     ReturnNewShape {
-        shape: LoriShape,
-    }
+        shape: LoriShapeRef,
+    },
+    ReturnNewCollider {
+        collider: LoriColliderRef,
+    },
+    ReturnNewThing {
+        thing: LoriThingRef,
+    },
+    ReturnNewObject {
+        object: LoriObjectRef,
+    },
 }
 
 pub enum MainToLoriCall {

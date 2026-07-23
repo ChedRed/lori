@@ -3,7 +3,7 @@ use std::process::exit;
 use crossbeam::channel::{Receiver, Sender};
 use mlua::{Function, UserDataRef};
 
-use crate::{content::shape::LoriShape, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{erorln, errorln, serorln, vbosln}}};
+use crate::{content::{collider::LoriColliderRef, shape::LoriShapeRef, thing::LoriThingRef}, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{dbugln, erorln, errorln, infoln, serorln, vbosln}}};
 
 pub struct Lori {
     lua: mlua::Lua,
@@ -19,6 +19,7 @@ pub struct Lori {
     lori_mousescrolled: Option<mlua::Function>,
     lori_update: Option<mlua::Function>,
     lori_render: Option<mlua::Function>,
+    lori_exit: Option<mlua::Function>,
 }
 
 impl Lori {
@@ -36,11 +37,15 @@ impl Lori {
         let tx9 = tx.clone();
         let tx10 = tx.clone();
         let tx11 = tx.clone();
+        let tx12 = tx.clone();
+        let tx13 = tx.clone();
         
         let rx = main_rtrn.clone();
         let rx2 = rx.clone();
         let rx3 = rx.clone();
         let rx4 = rx.clone();
+        let rx5 = rx.clone();
+        let rx6 = rx.clone();
         let lori = lua.create_table().unwrap();
         
         let set = lua.create_table().unwrap();
@@ -99,7 +104,7 @@ impl Lori {
         let new = lua.create_table().unwrap();
         _= new.set("shape", lua.create_function(move |_, (kind, w, h)| {
             _= tx10.send(LoriToMainCommand::NewShape { kind, w, h });
-            let mut new_shape: Option<LoriShape> = None;
+            let mut new_shape: Option<LoriShapeRef> = None;
             while let Ok(cmd) = rx4.recv() {
                 match cmd {
                     MainToLoriCommand::ReturnNewShape { shape } => {
@@ -111,6 +116,36 @@ impl Lori {
             }
             
             Ok(new_shape)
+        }).unwrap());
+        _= new.set("collider", lua.create_function(move |_, (shape, collision): (UserDataRef<LoriShapeRef>, String)| {
+            _= tx12.send(LoriToMainCommand::NewCollider { shape: shape.clone(), collision });
+            let mut new_collider: Option<LoriColliderRef> = None;
+            while let Ok(cmd) = rx5.recv() {
+                match cmd {
+                    MainToLoriCommand::ReturnNewCollider { collider } => {
+                        new_collider = Some(collider);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            
+            Ok(new_collider)
+        }).unwrap());
+        _= new.set("thing", lua.create_function(move |_, (shape, collider): (Option<UserDataRef<LoriShapeRef>>, Option<UserDataRef<LoriColliderRef>>)| {
+            _= tx11.send(LoriToMainCommand::NewThing { shape: shape.as_deref().cloned(), collider: collider.as_deref().cloned() });
+            let mut new_thing: Option<LoriThingRef> = None;
+            while let Ok(cmd) = rx6.recv() {
+                match cmd {
+                    MainToLoriCommand::ReturnNewThing { thing } => {
+                        new_thing = Some(thing);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            
+            Ok(new_thing)
         }).unwrap());
         let draw = lua.create_table().unwrap();
         _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {
@@ -158,7 +193,8 @@ impl Lori {
         let mut lori_mousemoved: Option<mlua::Function> = None; 
         let mut lori_mousescrolled: Option<mlua::Function> = None; 
         let mut lori_update: Option<mlua::Function> = None; 
-        let mut lori_render: Option<mlua::Function> = None; 
+        let mut lori_render: Option<mlua::Function> = None;
+        let mut lori_exit: Option<mlua::Function> = None;
         
         match lhk.get("load") {
             Ok(func) => {
@@ -241,6 +277,15 @@ impl Lori {
             }
             _ => {}
         }
+        match lhk.get::<Function>("exit") {
+            Ok(func) => {
+                lori_exit = Some(func);
+                if verbose {
+                    vbosln("Loaded function 'Exit'");
+                }
+            }
+            _ => {}
+        }
 
         
         Self {
@@ -257,6 +302,7 @@ impl Lori {
             lori_mousescrolled,
             lori_update,
             lori_render,
+            lori_exit,
         }
     }
 
@@ -345,6 +391,13 @@ impl Lori {
                     _= self.main_back.send(LoriToMainCall::Render);
                 }
                 MainToLoriCall::Exit => {
+                    match &self.lori_exit {
+                        Some(func) => {
+                            _= func.call::<()>(());
+                        }
+                        _ => {}
+                    }
+                    _= self.main_back.send(LoriToMainCall::Exit);
                     break;
                 }
             }

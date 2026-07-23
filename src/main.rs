@@ -11,9 +11,9 @@ use winit::window::{Window, WindowId};
 use wgpu::{naga::FastHashMap, util::DeviceExt};
 
 pub mod content;
-use content::{shape::Shape, object::GPUObject, object::Object};
+use content::{shape::LoriShape, thing::LoriThing};
 pub mod utils;
-use crate::{content::shape::LoriShape, utils::{GPUPrimitives, Location, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex, lori::Lori, print::{erorln, errorln, infoln, sdbugln}}};
+use crate::{content::{collider::{LoriCollider, LoriColliderRef}, shape::LoriShapeRef, thing::{LoriObjectRef, LoriThingRef}}, utils::{GPUPrimitives, Location, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex, lori::Lori, print::{dbugln, erorln, errorln, infoln}}};
 
 
 #[derive(Parser, Debug)]
@@ -76,12 +76,13 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     primitive_pipeline: wgpu::RenderPipeline,
 
-    shapes: FastHashMap<u64, Shape>,
+    lori_shapes: FastHashMap<u64, LoriShape>,
     shape_id: u64,
-    objects: Vec<Object>,
-    gpu_objects: Vec<GPUObject>,
+    lori_colliders: FastHashMap<u64, LoriCollider>,
+    collider_id: u64,
+    lori_things: FastHashMap<u64, LoriThing>,
+    thing_id: u64,
     primitives: Vec<Primitive>,
-    renderqueue: Vec<u64>,
 
     window: Arc<Window>,
     window_scale: [f32; 4],
@@ -109,6 +110,7 @@ struct State {
     lori_cmd: Receiver<LoriToMainCommand>,
     lori_cmd_rev: Sender<LoriToMainCommand>,
     lori_rtrn: Sender<MainToLoriCommand>,
+    lori_rtrn_rev: Receiver<MainToLoriCommand>,
     lori_handle: Option<JoinHandle<()>>,
 }
 
@@ -158,17 +160,19 @@ impl State {
         let (main_back, lori_back) = bounded::<LoriToMainCall>(0);
 
         let lori_cmd_rev = main_cmd.clone();
+        let lori_rtrn_rev = main_rtrn.clone();
 
         let mut lori: Lori = Lori::new(lua_code, argus.verbose, main_cmd, main_rtrn, main_call, main_back);
         let lori_handle = Some(std::thread::Builder::new()
             .name("lori".to_string())
             .spawn(move || { lori.begin(); }).unwrap());
         
-        let shapes: FastHashMap<u64, Shape> = FastHashMap::default();
+        let lori_shapes: FastHashMap<u64, LoriShape> = FastHashMap::default();
         let shape_id: u64 = 0;
-        let renderqueue: Vec<u64> = Vec::new();
-        let objects: Vec<Object> = Vec::new();
-        let gpu_objects: Vec<GPUObject> = Vec::new();
+        let lori_colliders: FastHashMap<u64, LoriCollider> = FastHashMap::default();
+        let collider_id: u64 = 0;
+        let lori_things: FastHashMap<u64, LoriThing> = FastHashMap::default();
+        let thing_id: u64 = 0;
 
         let mut gpu_view: GPUView = GPUView::new();
         let min: f32 = min(size.width, size.height) as f32;
@@ -388,11 +392,12 @@ impl State {
             render_pipeline,
             primitive_pipeline,
 
-            shapes,
+            lori_shapes,
             shape_id,
-            renderqueue,
-            objects,
-            gpu_objects,
+            lori_colliders,
+            collider_id,
+            lori_things,
+            thing_id,
             primitives,
 
             window,
@@ -421,6 +426,7 @@ impl State {
             lori_cmd,
             lori_cmd_rev,
             lori_rtrn,
+            lori_rtrn_rev,
             lori_handle,
         };
 
@@ -601,11 +607,35 @@ impl State {
 
         renderpass.set_bind_group(0, &self.gpu_view_bind_group, &[]);
         
-        for i in 0..self.gpu_objects.len() { // Draw each shape
-            renderpass.set_vertex_buffer(0, self.gpu_objects[i].vertex_buffer.slice(..));
-            renderpass.set_vertex_buffer(1, self.gpu_objects[i].location_buffer.slice(..));
-            renderpass.set_index_buffer(self.gpu_objects[i].index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            renderpass.draw_indexed(0..self.gpu_objects[i].indices.len() as u32, 0, 0..self.gpu_objects[i].locations.len() as _);
+        for obj in self.lori_things.iter_mut() { // Draw each shape
+            if obj.1.renderable() {
+                if let Some(real_vertex_buffer) = &obj.1.vertex_buffer {
+                    if let Some(real_location_buffer) = &obj.1.location_buffer {
+                        if let Some(real_index_buffer) = &obj.1.index_buffer {
+                            for item in obj.1.rigidhandles.iter() {
+                                if let Some(body) = self.rigidbodies.get(*item.1) {
+                                    if let Some(loc) = obj.1.locations.get_mut(item.0) {
+                                        let pose = body.position();
+                                        let pos = pose.translation;
+                                        let rot: f32 = pose.rotation.angle();
+                                        loc.position = [pos.x, pos.y];
+                                        loc.rotation = [rot, 0.];
+                                    }
+                                }
+                            }
+                            
+                            if let Some(real_location_buffer) = &obj.1.location_buffer {
+                                let locations: Vec<Location> = obj.1.locations.values().copied().collect();
+                                self.queue.write_buffer(&real_location_buffer, 0, bytemuck::cast_slice(&locations));
+                            }
+                            renderpass.set_vertex_buffer(0, real_vertex_buffer.slice(..));
+                            renderpass.set_vertex_buffer(1, real_location_buffer.slice(..));
+                            renderpass.set_index_buffer(real_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                            renderpass.draw_indexed(0..obj.1.indices as u32, 0, 0..obj.1.locations.len() as _);
+                        }
+                    }
+                }
+            }
         }
 
         
@@ -667,18 +697,60 @@ impl State {
                     indices.push(2);
                     indices.push(3);
                 }
-                self.shapes.insert(self.shape_id, Shape::new(vertices, indices));
-                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewShape { shape: LoriShape { uid: self.shape_id, tx: self.lori_cmd_rev.clone() } });
+                self.lori_shapes.insert(self.shape_id, LoriShape::new(vertices, indices));
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewShape { shape: LoriShapeRef { uid: self.shape_id, tx: self.lori_cmd_rev.clone() } });
                 self.shape_id += 1;
+            },
+            LoriToMainCommand::NewCollider { shape, collision } => {
+                let real_shape: &LoriShape = self.lori_shapes.get(&shape.uid).unwrap();
+                let vertices: Vec<Vertex> = real_shape.vertices.clone();
+                let indices: Vec<u32> = real_shape.indices.clone();
+                
+                self.lori_colliders.insert(self.collider_id, LoriCollider::new(vertices, indices, collision));
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewCollider { collider: LoriColliderRef { uid: self.collider_id, tx: self.lori_cmd_rev.clone() } });
+                self.collider_id += 1;
+            },
+            LoriToMainCommand::NewThing { shape, collider } => {
+                let mut final_shape: Option<LoriShape> = None;
+                let mut final_collider: Option<LoriCollider> = None;
+
+                if let Some(real_shape) = shape {
+                    final_shape = self.lori_shapes.get(&real_shape.uid).cloned();
+                }
+                if let Some(real_collider) = collider {
+                    final_collider = self.lori_colliders.get(&real_collider.uid).cloned();
+                }
+                
+                self.lori_things.insert(self.thing_id, LoriThing::new(&self.device, final_shape, final_collider));
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewThing { thing: LoriThingRef { uid: self.thing_id, tx: self.lori_cmd_rev.clone(), rx: self.lori_rtrn_rev.clone() } });
+                self.thing_id += 1;
             },
             LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label } => {
                 self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label, _pad0: 0, _pad1: 0, color });
             },
-            LoriToMainCommand::ShapeTest { uid, text } => {
-                if self.argus.devbug {
-                    sdbugln(format!("Shape {} prints '{}'", uid, text));
+            LoriToMainCommand::ThingSpawn { uid, x, y, r } => {
+                let thing: &mut LoriThing = self.lori_things.get_mut(&uid).unwrap();
+                let ouid: u64 = thing.spawn(x, y, r, &mut self.rigidbodies, &mut self.colliders);
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewObject { object: LoriObjectRef { puid: uid, uid: ouid, tx: self.lori_cmd_rev.clone() } })
+            },
+            LoriToMainCommand::ObjectPush { puid, uid, x, y } => {
+                let thing: &LoriThing = self.lori_things.get(&puid).unwrap();
+                let object: &Option<&RigidBodyHandle> = &thing.rigidhandles.get(&uid);
+                if let Some(real_object) = *object {
+                    if let Some(body) = self.rigidbodies.get_mut(*real_object) {
+                        body.add_force(Vector2 { x, y }, true);
+                    }
                 }
             },
+            LoriToMainCommand::ObjectPull { puid, uid, x1, y1, x2, y2 } => {
+                let thing: &LoriThing = self.lori_things.get(&puid).unwrap();
+                let object: &Option<&RigidBodyHandle> = &thing.rigidhandles.get(&uid);
+                if let Some(real_object) = *object {
+                    if let Some(body) = self.rigidbodies.get_mut(*real_object) {
+                        body.add_force_at_point(Vector2 { x: x1, y: y1 }, Vector2 { x: x2, y: y2 }, true);
+                    }
+                }
+            }
         }
     }
     
@@ -702,6 +774,7 @@ impl State {
 
     fn exit(&mut self) {
         _= self.lori_call.send(MainToLoriCall::Exit);
+        self.handle_lori_loop();
         if let Some(join_handle) = self.lori_handle.take() {
             _= join_handle.join();
         };

@@ -1,2 +1,3 @@
 pub mod shape;
-pub mod object;
+pub mod thing;
+pub mod collider;
