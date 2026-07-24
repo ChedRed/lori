@@ -3,7 +3,7 @@ use std::process::exit;
 use crossbeam::channel::{Receiver, Sender};
 use mlua::{Function, UserDataRef};
 
-use crate::{content::{collider::LoriColliderRef, shape::LoriShapeRef, thing::LoriThingRef}, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{dbugln, erorln, errorln, infoln, serorln, vbosln}}};
+use crate::{content::{collider::LoriColliderRef, shape::LoriShapeRef, spawner::LoriSpawnerRef}, utils::{LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, print::{dbugln, erorln, errorln, infoln, serorln, vbosln}}};
 
 pub struct Lori {
     lua: mlua::Lua,
@@ -60,8 +60,13 @@ impl Lori {
             Ok(())
         }).unwrap());
 
-        _= set_window.set("resizable", lua.create_function(move |_, is| { // lori.set.window.size
+        _= set_window.set("resizable", lua.create_function(move |_, is| { // lori.set.window.resizable
             _= tx4.send(LoriToMainCommand::SetWindowResizable { is });
+            Ok(())
+        }).unwrap());
+
+        _= set.set("gravity", lua.create_function(move |_, (x, y)| { // lori.set.window.size
+            _= tx13.send(LoriToMainCommand::SetGravity { x, y });
             Ok(())
         }).unwrap());
 
@@ -102,8 +107,8 @@ impl Lori {
         }).unwrap());
         
         let new = lua.create_table().unwrap();
-        _= new.set("shape", lua.create_function(move |_, (kind, w, h)| {
-            _= tx10.send(LoriToMainCommand::NewShape { kind, w, h });
+        _= new.set("shape", lua.create_function(move |_, (kind, w, h, color)| {
+            _= tx10.send(LoriToMainCommand::NewShape { kind, w, h, color });
             let mut new_shape: Option<LoriShapeRef> = None;
             while let Ok(cmd) = rx4.recv() {
                 match cmd {
@@ -132,20 +137,20 @@ impl Lori {
             
             Ok(new_collider)
         }).unwrap());
-        _= new.set("thing", lua.create_function(move |_, (shape, collider): (Option<UserDataRef<LoriShapeRef>>, Option<UserDataRef<LoriColliderRef>>)| {
-            _= tx11.send(LoriToMainCommand::NewThing { shape: shape.as_deref().cloned(), collider: collider.as_deref().cloned() });
-            let mut new_thing: Option<LoriThingRef> = None;
+        _= new.set("spawner", lua.create_function(move |_, (shape, collider): (Option<UserDataRef<LoriShapeRef>>, Option<UserDataRef<LoriColliderRef>>)| {
+            _= tx11.send(LoriToMainCommand::NewSpawner { shape: shape.as_deref().cloned(), collider: collider.as_deref().cloned() });
+            let mut new_spawner: Option<LoriSpawnerRef> = None;
             while let Ok(cmd) = rx6.recv() {
                 match cmd {
-                    MainToLoriCommand::ReturnNewThing { thing } => {
-                        new_thing = Some(thing);
+                    MainToLoriCommand::ReturnNewSpawner { spawner } => {
+                        new_spawner = Some(spawner);
                         break;
                     }
                     _ => {}
                 }
             }
             
-            Ok(new_thing)
+            Ok(new_spawner)
         }).unwrap());
         let draw = lua.create_table().unwrap();
         _= draw.set("rect", lua.create_function(move |_, (x, y, w, h, r, color)| {

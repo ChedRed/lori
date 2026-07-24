@@ -41,15 +41,15 @@ Lori = {
     --- @class Border
     Border = {},
 
-    --- @class Thing
-    Thing = {
-        --- @param self Thing
+    --- @class Spawner
+    Spawner = {
+        --- @param self Spawner
         --- @param x number
         --- @param y number
         --- @param r number
         --- @return Object
         spawn = function(self, x, y, r) return Lori.Object end,
-        --- @param self Thing
+        --- @param self Spawner
         --- @return nil
         erradicate = function(self) end,
     },
@@ -76,6 +76,11 @@ Lori = {
             --- @return number
             angle = function(self) return 0 end,
         },
+        --- @param self Object
+        --- @param x number
+        --- @param y number
+        --- @return nil
+        move = function(self, x, y) end,
         --- @param self Object
         --- @param x number
         --- @param y number
@@ -147,10 +152,10 @@ Lori = {
     render = function() end,
     --- @return nil
     exit = function() end,
-    
+
     set = {
         window = {
-            --- Thingaling!
+            --- Thingaling! // TODO: Create descriptions for functions
             --- @param text string
             --- @return nil
             title = function(text) end,
@@ -189,15 +194,17 @@ Lori = {
         --- @param type "rectangle"|"triangle"
         --- @param w number
         --- @param h number
+        --- @param color number[]
         --- @return Shape
-        shape = function(type, w, h) return Lori.Shape end,
+        shape = function(type, w, h, color) return Lori.Shape end,
         --- @param vertices Vertex[]
         --- @param indices integer[] | nil
         --- @return Shape
         mesh = function(vertices, indices) return Lori.Shape end,
         --- @param img string
+        --- @param scale number
         --- @return Shape
-        image = function(img) return Lori.Shape end,
+        image = function(img, scale) return Lori.Shape end,
         --- @param points Point[]
         --- @return Border
         border = function(points) return Lori.Border end,
@@ -207,8 +214,8 @@ Lori = {
         collider = function(shape, collision) return Lori.Collider end,
         --- @param shape Shape | nil
         --- @param collider Collider | nil
-        --- @return Thing
-        thing = function(shape, collider) return Lori.Thing end,
+        --- @return Spawner
+        spawner = function(shape, collider) return Lori.Spawner end,
         --- @param sound string
         --- @return Sound
         sound = function(sound) return Lori.Sound end,

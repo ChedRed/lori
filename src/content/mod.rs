@@ -1,3 +1,3 @@
 pub mod shape;
-pub mod thing;
+pub mod spawner;
 pub mod collider;

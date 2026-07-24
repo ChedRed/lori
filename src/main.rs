@@ -1,6 +1,6 @@
 use clap::Parser;
 use crossbeam::{channel::{Receiver, Sender, bounded, unbounded}, select};
-use std::{cmp::{max, min}, fs, process::exit, sync::Arc, thread::JoinHandle};
+use std::{fs, process::exit, sync::Arc, thread::JoinHandle};
 use rapier2d::prelude::*;
 use winit::{application::ApplicationHandler, event::MouseScrollDelta};
 use winit::dpi::PhysicalSize;
@@ -11,9 +11,9 @@ use winit::window::{Window, WindowId};
 use wgpu::{naga::FastHashMap, util::DeviceExt};
 
 pub mod content;
-use content::{shape::LoriShape, thing::LoriThing};
+use content::{shape::LoriShape, spawner::LoriSpawner};
 pub mod utils;
-use crate::{content::{collider::{LoriCollider, LoriColliderRef}, shape::LoriShapeRef, thing::{LoriObjectRef, LoriThingRef}}, utils::{GPUPrimitives, Location, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex, lori::Lori, print::{dbugln, erorln, errorln, infoln}}};
+use crate::{content::{collider::{LoriCollider, LoriColliderRef}, shape::LoriShapeRef, spawner::{LoriObjectRef, LoriSpawnerRef}}, utils::{GPUPrimitives, Location, LoriToMainCall, LoriToMainCommand, MainToLoriCall, MainToLoriCommand, Primitive, Vertex, lori::Lori, print::*}};
 
 
 #[derive(Parser, Debug)]
@@ -80,12 +80,11 @@ struct State {
     shape_id: u64,
     lori_colliders: FastHashMap<u64, LoriCollider>,
     collider_id: u64,
-    lori_things: FastHashMap<u64, LoriThing>,
-    thing_id: u64,
+    lori_spawners: FastHashMap<u64, LoriSpawner>,
+    spawner_id: u64,
     primitives: Vec<Primitive>,
 
     window: Arc<Window>,
-    window_scale: [f32; 4],
     gpu_view: GPUView,
     gpu_view_buffer: wgpu::Buffer,
     gpu_view_bind_group: wgpu::BindGroup,
@@ -171,15 +170,11 @@ impl State {
         let shape_id: u64 = 0;
         let lori_colliders: FastHashMap<u64, LoriCollider> = FastHashMap::default();
         let collider_id: u64 = 0;
-        let lori_things: FastHashMap<u64, LoriThing> = FastHashMap::default();
-        let thing_id: u64 = 0;
+        let lori_spawners: FastHashMap<u64, LoriSpawner> = FastHashMap::default();
+        let spawner_id: u64 = 0;
 
         let mut gpu_view: GPUView = GPUView::new();
-        let min: f32 = min(size.width, size.height) as f32;
-        let max: f32 = max(size.width, size.height) as f32;
-        gpu_view.scale = [size.height as f32 / max, size.width as f32 / max];
-        
-        let window_scale: [f32; 4] = [(size.width as f32 - min) / 2., (size.height as f32 - min) / 2., min, min];
+        gpu_view.scale = [size.width as f32, size.height as f32];
         
         let gpu_view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Viewport Buffer"),
@@ -396,12 +391,11 @@ impl State {
             shape_id,
             lori_colliders,
             collider_id,
-            lori_things,
-            thing_id,
+            lori_spawners,
+            spawner_id,
             primitives,
 
             window,
-            window_scale,
             gpu_view,
             gpu_view_buffer,
             gpu_view_bind_group,
@@ -478,11 +472,7 @@ impl State {
         self.size = new_size;
         self.configure_surface();
         let size: [u32; 2] = [self.size.width, self.size.height];
-        let min: f32 = min(size[0], size[1]) as f32;
-        let max: f32 = max(size[0], size[1]) as f32;
-        
-        self.gpu_view.scale = [size[1] as f32 / max, size[0] as f32 / max];
-        self.window_scale = [(size[0] as f32 - min) / 2., (size[1] as f32 - min) / 2., min, min];
+        self.gpu_view.scale = [size[0] as f32, size[1] as f32];
     }
     
     fn keyboard_inputs(&mut self, key: String, state: bool) {
@@ -549,10 +539,10 @@ impl State {
     fn render(&mut self) {
         self.current_time = chrono::Utc::now();
         
+        self.integration_parameters.dt = self.current_time.signed_duration_since(self.last_time).as_seconds_f32();
         _= self.lori_call.send(MainToLoriCall::Update { delta: self.integration_parameters.dt });
         self.handle_lori_loop();
         
-        self.integration_parameters.dt = self.current_time.signed_duration_since(self.last_time).as_seconds_f32();
         self.physics.step(
             self.gravity,
             &self.integration_parameters,
@@ -568,7 +558,6 @@ impl State {
             &(),
         );
 
-        
         let surface_texture = self.surface.get_current_texture();
         
         let pretexture_view = match surface_texture {
@@ -607,19 +596,20 @@ impl State {
 
         renderpass.set_bind_group(0, &self.gpu_view_bind_group, &[]);
         
-        for obj in self.lori_things.iter_mut() { // Draw each shape
+        for obj in self.lori_spawners.iter_mut() { // Draw each shape
             if obj.1.renderable() {
                 if let Some(real_vertex_buffer) = &obj.1.vertex_buffer {
                     if let Some(real_location_buffer) = &obj.1.location_buffer {
                         if let Some(real_index_buffer) = &obj.1.index_buffer {
                             for item in obj.1.rigidhandles.iter() {
-                                if let Some(body) = self.rigidbodies.get(*item.1) {
+                                if let Some(body) = self.rigidbodies.get_mut(*item.1) {
                                     if let Some(loc) = obj.1.locations.get_mut(item.0) {
                                         let pose = body.position();
                                         let pos = pose.translation;
                                         let rot: f32 = pose.rotation.angle();
                                         loc.position = [pos.x, pos.y];
                                         loc.rotation = [rot, 0.];
+                                        body.reset_forces(true);
                                     }
                                 }
                             }
@@ -677,20 +667,24 @@ impl State {
             LoriToMainCommand::SetWindowResizable { is } => {
                 _= self.window.set_resizable(is);
             },
+            LoriToMainCommand::SetGravity { x, y } => {
+                self.gravity = Vec2 { x, y };
+                dbugln("Gravity set");
+            }
             LoriToMainCommand::GetWindowSize => {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnGetWindowSize { w: self.size.width, h: self.size.height });
             },
             LoriToMainCommand::GetKeyPressed { key } => {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnKeyPressed { key: self.keys.contains(&key) });
             },
-            LoriToMainCommand::NewShape { kind, w, h } => {
+            LoriToMainCommand::NewShape { kind, w, h, color } => {
                 let mut vertices: Vec<Vertex> = Vec::new();
                 let mut indices: Vec<u32> = Vec::new();
                 if kind == "rectangle" {
-                    vertices.push(Vertex { position: [0., 0.], uv: [0., 0.], color: [1., 1., 1., 1.] });
-                    vertices.push(Vertex { position: [w, 0.], uv: [1., 0.], color: [1., 1., 1., 1.] });
-                    vertices.push(Vertex { position: [0., h], uv: [0., 1.], color: [1., 1., 1., 1.] });
-                    vertices.push(Vertex { position: [w, h], uv: [1., 1.], color: [1., 1., 1., 1.] });
+                    vertices.push(Vertex { position: [0., 0.], uv: [0., 0.], color });
+                    vertices.push(Vertex { position: [w, 0.], uv: [1., 0.], color });
+                    vertices.push(Vertex { position: [0., h], uv: [0., 1.], color });
+                    vertices.push(Vertex { position: [w, h], uv: [1., 1.], color });
 
                     indices.push(0);
                     indices.push(1);
@@ -710,7 +704,7 @@ impl State {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewCollider { collider: LoriColliderRef { uid: self.collider_id, tx: self.lori_cmd_rev.clone() } });
                 self.collider_id += 1;
             },
-            LoriToMainCommand::NewThing { shape, collider } => {
+            LoriToMainCommand::NewSpawner { shape, collider } => {
                 let mut final_shape: Option<LoriShape> = None;
                 let mut final_collider: Option<LoriCollider> = None;
 
@@ -721,21 +715,30 @@ impl State {
                     final_collider = self.lori_colliders.get(&real_collider.uid).cloned();
                 }
                 
-                self.lori_things.insert(self.thing_id, LoriThing::new(&self.device, final_shape, final_collider));
-                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewThing { thing: LoriThingRef { uid: self.thing_id, tx: self.lori_cmd_rev.clone(), rx: self.lori_rtrn_rev.clone() } });
-                self.thing_id += 1;
+                self.lori_spawners.insert(self.spawner_id, LoriSpawner::new(&self.device, final_shape, final_collider));
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewSpawner { spawner: LoriSpawnerRef { uid: self.spawner_id, tx: self.lori_cmd_rev.clone(), rx: self.lori_rtrn_rev.clone() } });
+                self.spawner_id += 1;
             },
             LoriToMainCommand::DrawPrimitive { x, y, w, h, r, color, label } => {
                 self.primitives.push(Primitive { xywh: [x, y, w, h], angle: r, label, _pad0: 0, _pad1: 0, color });
             },
-            LoriToMainCommand::ThingSpawn { uid, x, y, r } => {
-                let thing: &mut LoriThing = self.lori_things.get_mut(&uid).unwrap();
-                let ouid: u64 = thing.spawn(x, y, r, &mut self.rigidbodies, &mut self.colliders);
+            LoriToMainCommand::SpawnerSpawn { uid, x, y, r } => {
+                let spawner: &mut LoriSpawner = self.lori_spawners.get_mut(&uid).unwrap();
+                let ouid: u64 = spawner.spawn(x, y, r, &mut self.rigidbodies, &mut self.colliders);
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnNewObject { object: LoriObjectRef { puid: uid, uid: ouid, tx: self.lori_cmd_rev.clone() } })
             },
+            LoriToMainCommand::ObjectMove { puid, uid, x, y } => {
+                let spawner: &LoriSpawner = self.lori_spawners.get(&puid).unwrap();
+                let object: &Option<&RigidBodyHandle> = &spawner.rigidhandles.get(&uid);
+                if let Some(real_object) = *object {
+                    if let Some(body) = self.rigidbodies.get_mut(*real_object) {
+                        body.apply_impulse(Vector2 { x, y }, true);
+                    }
+                }
+            },
             LoriToMainCommand::ObjectPush { puid, uid, x, y } => {
-                let thing: &LoriThing = self.lori_things.get(&puid).unwrap();
-                let object: &Option<&RigidBodyHandle> = &thing.rigidhandles.get(&uid);
+                let spawner: &LoriSpawner = self.lori_spawners.get(&puid).unwrap();
+                let object: &Option<&RigidBodyHandle> = &spawner.rigidhandles.get(&uid);
                 if let Some(real_object) = *object {
                     if let Some(body) = self.rigidbodies.get_mut(*real_object) {
                         body.add_force(Vector2 { x, y }, true);
@@ -743,8 +746,8 @@ impl State {
                 }
             },
             LoriToMainCommand::ObjectPull { puid, uid, x1, y1, x2, y2 } => {
-                let thing: &LoriThing = self.lori_things.get(&puid).unwrap();
-                let object: &Option<&RigidBodyHandle> = &thing.rigidhandles.get(&uid);
+                let spawner: &LoriSpawner = self.lori_spawners.get(&puid).unwrap();
+                let object: &Option<&RigidBodyHandle> = &spawner.rigidhandles.get(&uid);
                 if let Some(real_object) = *object {
                     if let Some(body) = self.rigidbodies.get_mut(*real_object) {
                         body.add_force_at_point(Vector2 { x: x1, y: y1 }, Vector2 { x: x2, y: y2 }, true);

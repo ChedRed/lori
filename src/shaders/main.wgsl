@@ -34,14 +34,16 @@ fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
+    
     out.color = model.color;
     
     var prepos: vec2<f32> = rotate(vec2<f32>(0., 0.), model.position, model.rotation.x);
     prepos = rotate(view.position, prepos + model.offset, -view.rotation.x);
     
     var pos: vec2<f32> = prepos - view.position;
-    pos *= 0.05;
-
+    pos /= view.scale;
+    pos = pos * 2 + vec2<f32>(0.5, 0.5);
+    
     out.clip_position = vec4<f32>(pos, 0.0, 1.0);
     return out;
 }

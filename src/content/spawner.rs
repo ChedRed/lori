@@ -2,23 +2,23 @@ use std::process::exit;
 
 use crossbeam::channel::{Sender, Receiver};
 use mlua::{UserData, UserDataMethods};
-use rapier2d::{dynamics::{RigidBodyBuilder, RigidBodyHandle, RigidBodySet}, geometry::{ColliderBuilder, ColliderSet}, math::Vec2, utils::{PoseOps, RotationOps}};
+use rapier2d::{dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet}, geometry::{ColliderBuilder, ColliderSet}, math::Vec2, utils::{PoseOps, RotationOps}};
 
-use wgpu::{Queue, naga::FastHashMap, util::DeviceExt};
+use wgpu::{Queue, naga::{BuiltIn::Vertices, FastHashMap}, util::DeviceExt};
 use crate::{content::{collider::LoriCollider, shape::LoriShape}, utils::{Location, LoriToMainCommand, MainToLoriCommand}};
 
 
 #[derive(Clone)]
-pub struct LoriThingRef {
+pub struct LoriSpawnerRef {
     pub uid: u64,
     pub tx: Sender<LoriToMainCommand>,
     pub rx: Receiver<MainToLoriCommand>,
 }
 
-impl UserData for LoriThingRef {
+impl UserData for LoriSpawnerRef {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("spawn", |_, this, (x, y, r)| {
-            _= this.tx.send(LoriToMainCommand::ThingSpawn { uid: this.uid, x, y, r });
+            _= this.tx.send(LoriToMainCommand::SpawnerSpawn { uid: this.uid, x, y, r });
             let mut real_object: Option<LoriObjectRef> = None;
             while let Ok(cmd) = this.rx.recv() {
                 match cmd {
@@ -43,6 +43,10 @@ pub struct LoriObjectRef {
 
 impl UserData for LoriObjectRef {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("move", |_, this, (x, y)| {
+            _= this.tx.send(LoriToMainCommand::ObjectMove { puid: this.puid, uid: this.uid, x, y });
+            Ok(())
+        });
         methods.add_method("push", |_, this, (x, y)| {
             _= this.tx.send(LoriToMainCommand::ObjectPush { puid: this.puid, uid: this.uid, x, y });
             Ok(())
@@ -54,7 +58,7 @@ impl UserData for LoriObjectRef {
     }
 }
 
-pub struct LoriThing {
+pub struct LoriSpawner {
     count: u64,
     
     pub indices: u32,
@@ -66,13 +70,36 @@ pub struct LoriThing {
     
     pub hull: Option<ColliderBuilder>,
     pub rigidhandles: FastHashMap<u64, RigidBodyHandle>,
+    collision: String,
     collide: bool,
 }
 
-impl LoriThing {
+impl LoriSpawner {
     pub fn new(device: &wgpu::Device, shape: Option<LoriShape>, collider: Option<LoriCollider>) -> Self {
         let count: u64 = 0;
         
+        let mut points: Vec<Vec2> = Vec::new();
+        let mut hull: Option<ColliderBuilder> = None;
+        let mut center: Option<Vec2> = None;
+        let rigidhandles: FastHashMap<u64, RigidBodyHandle> = FastHashMap::default();
+        let mut collide: bool = false;
+        let mut collision: String = "static".to_string();
+        if let Some(real_collider) = collider {
+            collision = real_collider.collision;
+            collide = true;
+            for vertex in real_collider.vertices.iter() {
+                points.push(Vec2{
+                    x: vertex.position[0],
+                    y: vertex.position[1],
+                })
+            }
+
+            hull = Some(ColliderBuilder::convex_hull(&points.clone().into_boxed_slice()).unwrap()
+                .restitution(0.2)
+                .friction(0.2)
+                .density(0.001)); // TODO: Make it accessible via Lua
+            center = Some(hull.clone().unwrap().build().mass_properties().local_com);
+        }
 
         let mut indices: u32 = 0;
         let locations: FastHashMap<u64, Location> = FastHashMap::default();
@@ -81,6 +108,8 @@ impl LoriThing {
         let mut location_buffer: Option<wgpu::Buffer> = None;
         let mut render: bool = false;
         if let Some(real_shape) = shape {
+            let mut modified_shape = real_shape.clone();
+            
             render = true;
             indices = real_shape.indices.len() as u32;
             index_buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -88,10 +117,15 @@ impl LoriThing {
                 contents: bytemuck::cast_slice(&real_shape.indices),
                 usage: wgpu::BufferUsages::INDEX,
             }));
+
+            for vertex in modified_shape.vertices.iter_mut() {
+                vertex.position[0] -= center.unwrap().x;
+                vertex.position[1] -= center.unwrap().y;
+            }
             
             vertex_buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&real_shape.vertices),
+                contents: bytemuck::cast_slice(&modified_shape.vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             }));
             
@@ -103,22 +137,6 @@ impl LoriThing {
             }));
         }
 
-        let mut points: Vec<Vec2> = Vec::new();
-        let mut hull: Option<ColliderBuilder> = None;
-        let rigidhandles: FastHashMap<u64, RigidBodyHandle> = FastHashMap::default();
-        let mut collide: bool = false;
-        if let Some(real_collider) = collider {
-            collide = true;
-            for vertex in real_collider.vertices.iter() {
-                points.push(Vec2{
-                    x: vertex.position[0],
-                    y: vertex.position[1],
-                })
-            }
-            hull = Some(ColliderBuilder::convex_hull(&points.clone().into_boxed_slice()).unwrap()
-                .restitution(0.2)
-                .friction(0.2)); // TODO: Make it accessible via Lua
-        }
         
         Self {
             count,
@@ -132,6 +150,7 @@ impl LoriThing {
             
             hull,
             rigidhandles,
+            collision,
             collide,
         }
     }
@@ -141,10 +160,24 @@ impl LoriThing {
             self.locations.insert(self.count, Location {position: [x, y], rotation: [rotation, 0.]});
         }
         if self.collide {
-            let rb = RigidBodyBuilder::dynamic()
-                .translation(Vec2 { x, y })
-                .rotation(rotation)
-                .build();
+            let rb: RigidBody;
+            if self.collision == "static" {
+                rb = RigidBodyBuilder::fixed()
+                    .translation(Vec2 { x, y })
+                    .rotation(rotation)
+                    .build();
+            } else if self.collision == "diaxial" {
+                rb = RigidBodyBuilder::dynamic()
+                    .translation(Vec2 { x, y })
+                    .rotation(rotation)
+                    .lock_rotations()
+                    .build();
+            } else {
+                rb = RigidBodyBuilder::dynamic()
+                    .translation(Vec2 { x, y })
+                    .rotation(rotation)
+                    .build();
+            }
             let rb_handle = rigidbodies.insert(rb);
             self.rigidhandles.insert(self.count, rb_handle);
     

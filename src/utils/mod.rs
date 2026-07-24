@@ -4,7 +4,7 @@ pub mod print;
 
 use transform::Vector2;
 
-use crate::content::{collider::LoriColliderRef, shape::LoriShapeRef, thing::{LoriObjectRef, LoriThingRef}};
+use crate::content::{collider::LoriColliderRef, shape::LoriShapeRef, spawner::{LoriObjectRef, LoriSpawnerRef}};
 
 pub enum LoriToMainCommand {
     SetWindowTitle {
@@ -17,6 +17,10 @@ pub enum LoriToMainCommand {
     SetWindowResizable {
         is: bool,
     },
+    SetGravity {
+        x: f32,
+        y: f32,
+    },
     GetWindowSize,
     GetKeyPressed {
         key: String,
@@ -25,12 +29,13 @@ pub enum LoriToMainCommand {
         kind: String,
         w: f32,
         h: f32,
+        color: [f32; 4],
     },
     NewCollider {
         shape: LoriShapeRef,
         collision: String,
     },
-    NewThing {
+    NewSpawner {
         shape: Option<LoriShapeRef>,
         collider: Option<LoriColliderRef>,
     },
@@ -43,11 +48,17 @@ pub enum LoriToMainCommand {
         color: [f32; 4],
         label: u32,
     },
-    ThingSpawn {
+    SpawnerSpawn {
         uid: u64,
         x: f32,
         y: f32,
         r: f32,
+    },
+    ObjectMove {
+        puid: u64,
+        uid: u64,
+        x: f32,
+        y: f32,
     },
     ObjectPush {
         puid: u64,
@@ -79,8 +90,8 @@ pub enum MainToLoriCommand {
     ReturnNewCollider {
         collider: LoriColliderRef,
     },
-    ReturnNewThing {
-        thing: LoriThingRef,
+    ReturnNewSpawner {
+        spawner: LoriSpawnerRef,
     },
     ReturnNewObject {
         object: LoriObjectRef,
