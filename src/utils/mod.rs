@@ -21,10 +21,15 @@ pub enum LoriToMainCommand {
         x: f32,
         y: f32,
     },
+    SetCameraPosition {
+        x: f32,
+        y: f32,
+    },
     GetWindowSize,
     GetKeyPressed {
         key: String,
     },
+    GetCameraPosition,
     NewShape {
         kind: String,
         w: f32,
@@ -83,6 +88,10 @@ pub enum MainToLoriCommand {
     },
     ReturnKeyPressed {
         key: bool,
+    },
+    ReturnCameraPosition {
+        x: f32,
+        y: f32,
     },
     ReturnNewShape {
         shape: LoriShapeRef,

@@ -1,26 +1,45 @@
+JumpLock = false
+
 function lori.load()
     lori.set.window.title("Lori Test Application")
-    PlayerShape = lori.new.shape("rectangle", 32, 32, { 1., 0., 0., 1. })
-
-    PlayerCollider = lori.new.collider(PlayerShape, "dynamic")
-    PlayerSpawner = lori.new.spawner(PlayerShape, PlayerCollider)
-
-    Object = PlayerSpawner:spawn(0, 0, 0)
 
     lori.set.gravity(0, -1000)
+    lori.set.camera.position(100, 100)
+
+    PlayerShape = lori.new.shape("rectangle", 32, 32, { 1, 0, 0, 1 })
+    PlayerCollider = lori.new.collider(PlayerShape, "diaxial")
+    PlayerSpawner = lori.new.spawner(PlayerShape, PlayerCollider)
+    PlayerObject = PlayerSpawner:spawn(0, 0, 0)
+
+    MapShape = lori.new.shape("rectangle", 2000, 10, { 0, 0, 1, 1 })
+    MapCollider = lori.new.collider(MapShape, "static")
+    MapSpawner = lori.new.spawner(MapShape, MapCollider)
+    MapObject = MapSpawner:spawn(-500, -500, 0)
+end
+
+function lori.keyreleased(key)
+    if key == "w" then
+        JumpLock = false
+    end
+    if key == "e" then
+        print(lori.get.camera.position()[1])
+    end
 end
 
 function lori.update(delta)
     if lori.get.key.state("w") then
-        Object:move(0, 10)
+        if JumpLock == false then
+            PlayerObject:move(0, 200)
+            JumpLock = true
+        end
     end
     if lori.get.key.state("s") then
-        Object:move(0, -10)
+        PlayerObject:move(0, -10)
     end
     if lori.get.key.state("a") then
-        Object:move(-10, 0)
+        PlayerObject:move(-10, 0)
     end
     if lori.get.key.state("d") then
-        Object:move(10, 0)
+        PlayerObject:move(10, 0)
     end
 end

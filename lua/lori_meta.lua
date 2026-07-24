@@ -63,6 +63,11 @@ Lori = {
             --- @return nil
             position = function(self, x, y) end,
             --- @param self Object
+            --- @param x number
+            --- @param y number
+            --- @return nil
+            motion = function(self, x, y) end,
+            --- @param self Object
             --- @param r number
             --- @return nil
             angle = function(self, r) end,
@@ -72,6 +77,10 @@ Lori = {
             --- @return number
             --- @return number
             position = function(self) return 0, 0 end,
+            --- @param self Object
+            --- @return number
+            --- @return number
+            motion = function(self) return 0, 0 end,
             --- @param self Object
             --- @return number
             angle = function(self) return 0 end,
@@ -155,7 +164,7 @@ Lori = {
 
     set = {
         window = {
-            --- Thingaling! // TODO: Create descriptions for functions
+            -- Thingaling! // TODO: Create descriptions for functions
             --- @param text string
             --- @return nil
             title = function(text) end,
@@ -171,6 +180,12 @@ Lori = {
         --- @param y number
         --- @return nil
         gravity = function(x, y) end,
+        camera = {
+            --- @param x number
+            --- @param y number
+            --- @return nil
+            position = function(x, y) end,
+        }
     },
 
     get = {
@@ -185,6 +200,10 @@ Lori = {
             state = function(key) return true end,
         },
         mouse = {
+            --- @return number[]
+            position = function() return {0, 0} end,
+        },
+        camera = {
             --- @return number[]
             position = function() return {0, 0} end,
         }

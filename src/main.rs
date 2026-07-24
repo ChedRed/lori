@@ -657,26 +657,32 @@ impl State {
         match v {
             LoriToMainCommand::SetWindowTitle { text } => {
                 self.window.set_title(text.as_str());
-            },
+            }
             LoriToMainCommand::SetWindowSize { w, h } => {
                 // if let Some(_) = self.window.request_inner_size(PhysicalSize { width: w, height: h }) {
                 //     self.resize(PhysicalSize { width: w, height: h });
                 // } // TODO: Wait...
                 _= self.window.request_inner_size(PhysicalSize { width: w, height: h });
-            },
+            }
             LoriToMainCommand::SetWindowResizable { is } => {
                 _= self.window.set_resizable(is);
-            },
+            }
             LoriToMainCommand::SetGravity { x, y } => {
                 self.gravity = Vec2 { x, y };
                 dbugln("Gravity set");
+            }
+            LoriToMainCommand::SetCameraPosition { x, y } => {
+                self.gpu_view.position = [x, y];
             }
             LoriToMainCommand::GetWindowSize => {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnGetWindowSize { w: self.size.width, h: self.size.height });
             },
             LoriToMainCommand::GetKeyPressed { key } => {
                 _= self.lori_rtrn.send(MainToLoriCommand::ReturnKeyPressed { key: self.keys.contains(&key) });
-            },
+            }
+            LoriToMainCommand::GetCameraPosition => {
+                _= self.lori_rtrn.send(MainToLoriCommand::ReturnCameraPosition { x: self.gpu_view.position[0], y: self.gpu_view.position[1] });
+            }
             LoriToMainCommand::NewShape { kind, w, h, color } => {
                 let mut vertices: Vec<Vertex> = Vec::new();
                 let mut indices: Vec<u32> = Vec::new();
@@ -854,6 +860,6 @@ fn main() {
     let mut app = App::default();
     match events.run_app(&mut app) {
         Ok(()) => infoln("Exited successfully."),
-        Err(error) => erorln("Exited with an error:\n {error:?}"),
+        Err(error) => serorln(format!("Exited with an error:\n {error:?}")),
     }
 }

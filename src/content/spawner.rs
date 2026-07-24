@@ -1,10 +1,8 @@
-use std::process::exit;
-
 use crossbeam::channel::{Sender, Receiver};
 use mlua::{UserData, UserDataMethods};
-use rapier2d::{dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet}, geometry::{ColliderBuilder, ColliderSet}, math::Vec2, utils::{PoseOps, RotationOps}};
+use rapier2d::{dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet}, geometry::{ColliderBuilder, ColliderSet}, math::Vec2};
 
-use wgpu::{Queue, naga::{BuiltIn::Vertices, FastHashMap}, util::DeviceExt};
+use wgpu::{naga::FastHashMap, util::DeviceExt};
 use crate::{content::{collider::LoriCollider, shape::LoriShape}, utils::{Location, LoriToMainCommand, MainToLoriCommand}};
 
 
@@ -80,7 +78,6 @@ impl LoriSpawner {
         
         let mut points: Vec<Vec2> = Vec::new();
         let mut hull: Option<ColliderBuilder> = None;
-        let mut center: Option<Vec2> = None;
         let rigidhandles: FastHashMap<u64, RigidBodyHandle> = FastHashMap::default();
         let mut collide: bool = false;
         let mut collision: String = "static".to_string();
@@ -98,7 +95,6 @@ impl LoriSpawner {
                 .restitution(0.2)
                 .friction(0.2)
                 .density(0.001)); // TODO: Make it accessible via Lua
-            center = Some(hull.clone().unwrap().build().mass_properties().local_com);
         }
 
         let mut indices: u32 = 0;
@@ -108,8 +104,6 @@ impl LoriSpawner {
         let mut location_buffer: Option<wgpu::Buffer> = None;
         let mut render: bool = false;
         if let Some(real_shape) = shape {
-            let mut modified_shape = real_shape.clone();
-            
             render = true;
             indices = real_shape.indices.len() as u32;
             index_buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -117,15 +111,10 @@ impl LoriSpawner {
                 contents: bytemuck::cast_slice(&real_shape.indices),
                 usage: wgpu::BufferUsages::INDEX,
             }));
-
-            for vertex in modified_shape.vertices.iter_mut() {
-                vertex.position[0] -= center.unwrap().x;
-                vertex.position[1] -= center.unwrap().y;
-            }
             
             vertex_buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&modified_shape.vertices),
+                contents: bytemuck::cast_slice(&real_shape.vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             }));
             
@@ -170,12 +159,14 @@ impl LoriSpawner {
                 rb = RigidBodyBuilder::dynamic()
                     .translation(Vec2 { x, y })
                     .rotation(rotation)
+                    .ccd_enabled(true)
                     .lock_rotations()
                     .build();
             } else {
                 rb = RigidBodyBuilder::dynamic()
                     .translation(Vec2 { x, y })
                     .rotation(rotation)
+                    .ccd_enabled(true)
                     .build();
             }
             let rb_handle = rigidbodies.insert(rb);

@@ -12,20 +12,20 @@ Functions with '=' or '-' are implemented, with '-' meaning untested.
 [=] lori.set.window.title(text: string) -> nil
 [-] lori.set.window.size(w: int, h: int) -> nil
 [=] lori.set.window.resizable(is: bool) -> nil
-[ ] lori.set.gravity(x: number, y: number) -> nil
-lori.set.camera.position(x, y) -> nil
+[=] lori.set.gravity(x: number, y: number) -> nil
+[=] lori.set.camera.position(x, y) -> nil
 
 [=] lori.get.window.size() -> table[w: int, h: int]
 [=] lori.get.key.state(key: string) -> bool
-[=] lori.get.mouse.position() -> table[x: number, y: number]
-lori.get.camera.position() -> table[x: number, y: number]
+[ ] lori.get.mouse.position() -> table[x: number, y: number]
+[ ] lori.get.camera.position() -> table[x: number, y: number]
 
 [=] lori.new.shape(type: string("rectangle"|"triangle"), w: number, h: number, color: number[]) -> lori.Shape
 [ ] lori.new.mesh(vertices: Vertex[], indices: int[] | nil) -> lori.Shape
 [ ] lori.new.image(image: string, scale: number) -> lori.Shape
 [ ] lori.new.border(points: Point[]) -> lori.Border
-[ ] lori.new.collider(shape: lori.Shape, collision: string("static"|"diaxial"|"dynamic")) -> lori.Collider
-[ ] lori.new.spawner(shape: lori.Shape | nil, collider: lori.Collider | nil) -> lori.Spawner
+[=] lori.new.collider(shape: lori.Shape, collision: string("static"|"diaxial"|"dynamic")) -> lori.Collider
+[=] lori.new.spawner(shape: lori.Shape | nil, collider: lori.Collider | nil) -> lori.Spawner
 [ ] lori.new.sound(sound: String) -> lori.Sound
 [ ] lori.new.font(font: String) -> lori.Font
 
@@ -38,14 +38,14 @@ lori.get.camera.position() -> table[x: number, y: number]
 [ ] lori.Sound.loop(count: number) -> nil
 [ ] lori.Sound.stop() -> nil
 
-[ ] lori.Spawner.spawn(x, y, r) -> lori.Object
+[=] lori.Spawner.spawn(x, y, r) -> lori.Object
 [ ] lori.Spawner.erradicate() -> nil
 
 [ ] lori.Object.set.position(x: number, y: number) -> nil
-lori.Object.set.motion(x: number, y: number) -> nil
+[ ] lori.Object.set.motion(x: number, y: number) -> nil
 [ ] lori.Object.set.angle(r: number) -> nil
 [ ] lori.Object.get.position() -> table[x: number, y: number]
-lori.Object.get.motion() -> table[x: number, y: number]
+[ ] lori.Object.get.motion() -> table[x: number, y: number]
 [ ] lori.Object.get.angle() -> number
 [=] lori.Object.move(x: number, y: number) -> nil
 [=] lori.Object.push(x: number, y: number) -> nil
@@ -63,7 +63,7 @@ lori.Object.get.motion() -> table[x: number, y: number]
 [=] lori.mousescrolled(x, y) -> nil
 [=] lori.update() -> nil
 [=] lori.render() -> nil
-[-] lori.exit() -> nil
+[=] lori.exit() -> nil
 ```
 
 ```
@@ -83,9 +83,7 @@ TODO:
 - Enforce at least one physics tick before rendering, unless lori.update is not present
 - Add the rest of the functions ([=] and [-] means fully implemented, but [-] is untested/able)
 - Add safeguard to prevent pushing static objects, or objects without colliders
-- Add object:move for impulse, keeping push/pull for force
-- Change density to be lower
-- Make impulse different
-- Add a way to cancel motion
-- Make the collision type matter
+- Make nil lori functions sequential
+
+- I don't like the proportions for physics.
 ```
